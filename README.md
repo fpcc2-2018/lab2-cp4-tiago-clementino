@@ -12,10 +12,14 @@ O [exercício original de análise](https://github.com/wikimedia-research/Discov
 
 `reports`: notebooks das análises.
 
-## O que já temos
+## O relatório
 
-Como as análises propostas na tarefa original são em sua maioria sobre resultados de buscas e a navegação que acontece depois delas, já há código para ler os dados originais e criar algumas métricas sobre buscas nas sessões de usuário e sobre a navegaçao depois de cada busca em `code/import-events_to_searches.R`. Executar `Rscript code/import-events_to_searches.R` gera o arquivo `data/search_data.csv`. O script `import-events_to_searches.R` em si é a melhor documentação do que significa cada coluna em `data/search_data.csv`.
+Este relatório foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada em <http://rpubs.com/tiago_clementino/384699>.
+
+## Os dados
+
+O script `code/import-events_to_searches.R` é usado para tratar os dados de modo a criar e lapidar variável que tornaram as tarefas mais fáceis. Executar este script gera o arquivo `data/search_data.csv`. O script `import-events_to_searches.R` em si é a melhor documentação do que significa cada coluna em `data/search_data.csv`.
 
 ## Dependências
 
-R, com os pacotes `tidyverse`, `lubridate` e `here`.
+R através da IDE RStudio, com os pacotes `tidyverse`, `prettydoc`, `lubridate` e `here`.
