@@ -36,3 +36,13 @@ Na IDE do RStudio, instale os seguintes pacotes:
 - `prettydoc`
 - `lubridate`
 - `here`
+
+## Procedimento para Replicação do Relatório
+
+1. Configure o ambiente conforme descrito acima em "Dependências".
+2. Clone este repositório. 
+3. inicie a IDE RStudio.
+4. Abra o projeto ".\exercicio-wikimedia.Rproj".
+3. Abra o arquivo ".\dados\import-events_to_searches.R". Em seguida clique em "Run" (canto superior direito do editor). Isto pode levar algum tempo.
+4. Abra o arquivo ".\reports\lab-2-checkpoint-4.2.Rmd". Clique em "Knit" (canto superior esquerdo do editor). Dentre as opções apresentadas, selecione "knit to html_pretty".
+5. O resultado será exibido e estará disponível em ".\reports\lab-2-checkpoint-4.2.html".
