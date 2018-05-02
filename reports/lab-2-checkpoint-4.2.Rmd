@@ -20,7 +20,7 @@ vignette: >
 
 >Abstract
 >
-> A exploratory report involving an analysis task proposed by Wikimedias Foundation. The work described here aims to find specific relationships between the properties present in the data. The result is some useful conclusions that can be reached only on the basis of the available information.
+> A exploratory report involving an analysis task proposed by Wikimedias Foundation. The work described here aims to find specific relationships between the properties present in the data. The result is some useful conclusions that may be reached only on the basis of the available information.
 
 ```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
 library(tidyverse)
