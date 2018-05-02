@@ -1,6 +1,6 @@
 ---
 title: "FPCC1"
-subtitle: "Laboratory 02 Check 04"
+subtitle: "Laboratório 02 Checkpoint 04"
 author:
 - name: "Tiago Clementino"
 date: "`r format(Sys.Date(), '%d de %B de %Y')`"
@@ -14,11 +14,13 @@ output:
     keep_tex: yes
 vignette: >
   %\VignetteIndexEntry{Creating Pretty Documents from R Markdown - The Leonids Theme}
-  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
 ---
 
-> A descriptive report involving an analysis task proposed by Wikimedias Foundation. The work described here aims to find specific relationships between the properties present in the data. The result is some useful conclusions that can be reached only on the basis of the available information.
+>Abstract
+>
+> A exploratory report involving an analysis task proposed by Wikimedias Foundation. The work described here aims to find specific relationships between the properties present in the data. The result is some useful conclusions that can be reached only on the basis of the available information.
 
 ```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
 library(tidyverse)
@@ -29,19 +31,19 @@ library(lubridate)
 ```{r read, include=FALSE}
 buscas = read_csv(here::here("data/search_data.csv"))
 
-buscas = buscas %>% 
-    mutate(day = round_date(session_start_date, unit = "day"))
+#buscas = buscas %>% 
+#    mutate(day = round_date(session_start_date, unit = "day"))
 ```
 # Objetivo
 
-Vamos reproduzir um problema de exploração de dados que a Wikimedia Foundation usou em 2016 para recrutar pessoas para trabalhar no departamento de descoberta deles. O objetivo é seguir as instruções colocadas na tarefa original, respondendo as 4 perguntas que são colocadas lá.
+Vamos reproduzir um problema de exploração de dados que a Fundação Wikimedia usou em 2016 no recrutamento de pessoas para trabalhar em seu departamento de descoberta. O objetivo é seguir as instruções colocadas na tarefa original, respondendo as 4 perguntas que são colocadas.
 
-A entrega consistirá de uma versão de um repositório no Github com um link para o seu relatório final no início do README.md do seu repositório. 
+A entrega consiste de uma versão de um repositório no Github com um link para o seu relatório final no início do README.md do seu repositório. 
 
 
 ### Contexto
 
-O departamento de descoberta da Fundação Wikimedia utiliza um registro de evento (EL, event logging) para avaliar várias métricas de per formance e usabilidade, ajudando-os a tomar decisões. Principalmente, este departamento está interessado em:
+O departamento de descoberta da Fundação Wikimedia utiliza um registro de eventos (Event Logging, EL) para avaliar várias métricas de performance e usabilidade, ajudando-os a tomar decisões. Principalmente, este departamento está interessado em:
 
 
 * *clickthrough rate*: a proporção de sessões de busca onde o usuário clica em um dos resultados apresentados.
@@ -49,48 +51,48 @@ O departamento de descoberta da Fundação Wikimedia utiliza um registro de even
 * *zero results rate*: a proporção de buscas que não tiveram resultados.
 
 
-e outras métricas fora do escopo desta tarefa. EL usa Javascript para enviar menssagens aos nossos servidores de forma assincrona quando o usuário realiza ações específicas. Nesta tarefa você vai analisar um subconjunto de nosso registro de eventos.
+e outras métricas fora do escopo desta tarefa. EL usa Javascript para enviar mensagens aos nossos servidores de forma assíncrona quando o usuário realiza ações específicas. Nesta tarefa você vai analisar um subconjunto de nosso registro de eventos.
 
 
-### Nossos dados
+### Dados
 
-O conjunto de dados vem de uma estratégia de *logging* usada para avaliar a satisfação do usuário. Usuários *standalone* são randomicamente coletados para ser anonimamente rastreados por tal estratégia, que usa um sistema de descoberta do tipo *I'm alive* para estimar quanto tempo os usuários permanessem nas páginas que eles visitam. O conjunto de dados contém em tabela pouco mais de uma semana de EL com as seguintes colunas.
+O conjunto de dados vem de uma estratégia de EL usada para avaliar a satisfação do usuário. Usuários *standalone* são randomicamente coletados para ser anonimamente rastreados por tal estratégia, que usa um sistema de descoberta do tipo *I'm alive* para estimar quanto tempo os usuários permanecem nas páginas que eles visitam. O conjunto de dados contém em tabela pouco mais de uma semana de EL com as seguintes colunas.
 
 | Campo              | Tipo    | Descrição                                                                         |
 |--------------------|---------|-----------------------------------------------------------------------------------|
 | `uuid`             | string  | Identificador universal único (UUID) para gerenciamento dos registros.            |
 | `timestamp`        | integer | Data e hora (UTC) do evento com a seguinte formatação: YYYYMMDDhhmmss.            |
-| `session_id`       | string  | Um idenficador individual de sessão único.                                        |
+| `session_id`       | string  | Um identificador individual de sessão único.                                      |
 | `group`            | string  | Uma marca ("a" ou "b").                                                           |
-| `action`           | string  | Identifica a natureza do evento em que foi cridado. Veja abaixo.                  |
+| `action`           | string  | Identifica a natureza do evento em que foi criado. Veja abaixo.                   |
 | `checkin`          | integer | Quantos segundos a página passou aberta.                                          |
 | `page_id`          | string  | Um identificador único relacionado às páginas visitadas e verificadas.            |
-| `n_results`        | integer | Números de sugestões de páginas retornado. Apenas para eventos searchResultPage.  |
-| `result_position`  | integer | A posição do link no SERP (Search Engine Results Page) para a página visitada.    |
+| `n_results`        | integer | Número de sugestões de páginas retornado. Apenas para eventos searchResultPage.   |
+| `result_position`  | integer | A posição do link na SERP (Search Engine Results Page) para a página visitada.    |
 
 
 O campo `action` pode ter os seguintes valores:
 
 
-* `searchResultPage`: quanto uma nova busca é realizada e um SERP é apresentado ao usuário.
+* `searchResultPage`: quando uma nova busca é realizada e uma SERP é apresentado ao usuário.
 
-* `visitPage`: quando o suário clica em um *link* dos resultados.
+* `visitPage`: quando o usuário clica em um *link* dos resultados.
 
 * `checkin`: quando o usuário permaneceu em uma página por um intervalo de tempo pré-definido.
 
 
 ### Descrição do objetivo
 
-Você deve criar um relatório reproduzível respondendo as seguintes perguntas:
+O objetivo aqui é criar um relatório reproduzível respondendo, de acordo com os dados, as seguintes perguntas:
 
 
- - Q1.Qual é nossa *clickthrough rate* geral diária? Como isto varia entre os grupos?
+ - **Q1**. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
 
- - Q2.Quais resultados da busca (posições) as pessoas tendem a tentar primeiro? Como isto varia dia após dia?
+ - **Q2**. Quais resultados da busca (posições) as pessoas tendem a seguir primeiro? Como isto varia dia após dia?
 
- - Q3.Qual nossa *zero results rate* geral diária? Como isto varia entre os grupos?
+ - **Q3**. Qual é a *zero results rate* geral diária? Como isto varia entre os grupos?
 
- - Q4.Tendo a duração da sessão como a diferença entre o primeiro e o ultimo evento em uma sessão. Esolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualize o relacionamento.
+ - **Q4**. Tendo a duração da sessão como a diferença entre o primeiro e o último evento em uma sessão. Escolha uma variável nos dados e descreva seu relacionamento com a duração da sessão. Visualize o relacionamento.
 
  - Resuma suas descobertas em um sumário executivo.
 
@@ -98,9 +100,9 @@ Você deve criar um relatório reproduzível respondendo as seguintes perguntas:
 *Todos os resultados devem ser amplamente replicáveis.
 
 
-### Nossos dados tratados
+### Dados tratados
 
-Para Facilitar nosso esforço em resolver as quatro questões, decidimos tratar os dados utilizando o script "import-events_to_searches.R". As informaçoes que antes eram referentes a eventos registrados, agora foram agrupadas em buscas propriamente. Os novos dados, agora simplificados e mais fáceis de tratar, estão dispostos em uma tabela com as seguintes colunas:
+Para Facilitar nosso esforço em resolver as quatro questões, decidi tratar os dados utilizando o script "import-events_to_searches.R" (editado a partir da versão inicial presente no repositório original deste *checkpoint*). As informações que antes eram referentes a eventos pontuais, agora foram agrupadas em buscas (com possivelmente mais de um evento). Os novos dados, agora simplificados e mais fáceis de tratar, estão dispostos em uma tabela com as seguintes colunas:
 
 
 | Campo                      | Tipo    | Descrição                                                             |
@@ -109,7 +111,7 @@ Para Facilitar nosso esforço em resolver as quatro questões, decidimos tratar 
 | `session_start_timestamp`  | integer | Data e hora de início da sessão correspondente                        |
 | `day`                      | date    | Data da sessão correspondente                                         |
 | `session_legth`            | integer | Duração da sessão contada em segundos                                 |
-| `last_search`              | integer | Ultima busca realizada na sessão                                      |
+| `last_search`              | integer | Última busca realizada na sessão (ultimo `search_index`)              |
 | `group`                    | string  | Uma marca de grupo ("a" e "b")                                        |
 | `results`                  | integer | Número de resultados da busca                                         |
 | `num_clicks`               | integer | Número de páginas acessadas na busca                                  |
@@ -119,15 +121,13 @@ Para Facilitar nosso esforço em resolver as quatro questões, decidimos tratar 
 # Questões
 
 
-### Q1. Qual é nossa *clickthrough rate* geral diária? Como isto varia entre os grupos?
+### Q1. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
 
-Algo crucial para começarmos a responder estas questões é calcular a taxa de cliques por sessão de busca. Como tal taxa é por sessão, agrupar os dados por sessão é um bom primeiro passo. Enquanto ocorre este agrupamento criamos duas novas variáveis que ajudaram na tarefa de analisar a taxa de cliques: `visited` para identificar facilmente qual sessão teve ou não cliques (1 ou 0) e `first_search_zero` que marca aquelas sessões cuja primeira busca não trouxe resultados. `results` e `num_clicks` soma as variáveis originais de mesmo nome, agrupando por sessão.
+Algo crucial para começarmos a responder esta questão é calcular a taxa de cliques por sessão de busca. Como a taxa é por sessão, agrupar os dados desta forma é um bom primeiro passo. Enquanto ocorre este agrupamento criamos duas novas variáveis que ajudaram na tarefa de analisar a taxa de cliques: `visited` para identificar facilmente qual sessão teve ou não cliques (1 ou 0) e `first_search_zero` que marca aquelas sessões cuja primeira busca não trouxe resultados. `results` e `num_clicks` soma as variáveis originais de mesmo nome, agrupando por sessão.
 
 ```{r}
 sessions = buscas %>% #agrupando por sessão
-    # filter(action = 'visitPage') %>%
     group_by(group, day, session_id) %>% 
-    #summarise(visits = sum(num_clicks)) %>% 
     summarise(visited = ifelse(sum(num_clicks) > 0, 1, 0),
               session_legth = first(session_legth),
               last_search = first(last_search),
@@ -139,14 +139,13 @@ sessions = buscas %>% #agrupando por sessão
 Partindo para a prática usaremos um *Stepped Line*, que é um tipo de gráfico que reuni características de gráfico de linha e histograma. Trata-se de um gráfico de linha discreto, onde o eixo horizontal representa o tempo (em dias) e o eixo vertical exibe uma proporção calculada dividindo o total de sessões com buscas úteis (com acesso a alguns dos links retornados) pelo total de sessões.
 
 ```{r}
-
 sessions %>% 
     group_by(group, day) %>% 
     summarise(proportion = sum(visited == 1)/n()) %>% 
         ggplot(aes(x = day, y = proportion, color = group)) + 
-        geom_step() + #(fill = "darkcyan", color = "darkcyan") +
+        geom_step() + 
     labs(x='Dias',  
-        y="Proporção de 'clickthrough rate'", 
+        y="'clickthrough rate'", 
         title="Proporção Diária de 'clickthrough rate'", 
         color='Grupos',
         subtitle="(day, proportion)", 
@@ -158,24 +157,26 @@ sessions %>%
         axis.title.y = element_text(size="15"),
         axis.text.x = element_text(size="12"),
         axis.text.y = element_text(size="12"),
+        legend.position="top",
         panel.border=element_blank())
 ```
 
 Observe que as proporções são bem baixas, sobretudo no grupo "b". Isto indica que existe alguma característica no grupo "a" que estimula o sucesso da busca. Porém, a taxa de sucesso é muito baixa em ambos os grupos.
 
-De fato, não temos total clareza a respeito do que tratam os dados. A variável `group` tráz as marcas "a" e "b" que são um tanto obscuras, levando em consideração apenas a descrição da tarefa. Porém, observando os dados, identificamos uma possível saída para a situação apresentada no parágrarfo acima. Se isolarmos não apenas os grupos para esta análise, mas também diferenciarmos sessões que obtiveram uma primeira busca vazia (veja o gráfico abaixo), perceberemos que o grupo "a" perciste na busca (tenta novamente em caso de zero resultados) a uma taxa ainda maior que toda a amostra do grupo "b". Isto nos leva a crer que pode haver mais alguma característica deste processo, que não está presente nos dados e que pode apontar uma direção para a solução deste problema.
+Observe o que ocorre se observarmos apenas sessões com nenhum resultado de busca (gráfico abaixo). Perceba que há buscas vazias com acesso a resultados, o que a priori parece um contrassenso. Porém, buscas vazias em uma mesma sessão podem ser ecos de buscas anteriores (paginação de resultados, por exemplo).
+
+Observe que a dispersão destes resultados é bastante heterogênea e o volume é pequeno, possíveis sinais de que tratam-se de *outliers*.
 
 ```{r}
 sessions %>% 
-    group_by(group, first_search_zero, day) %>% 
-    summarise(proportion = sum(visited == 1)/n()) %>% 
-    ggplot(aes(x = day, y = proportion, color = group, linetype = first_search_zero)) + 
-    geom_step()+
+    group_by(group, day) %>% 
+    summarise(proportion = sum(visited == 1 & results == 0)/n()) %>% 
+        ggplot(aes(x = day, y = proportion, color = group)) + 
+        geom_step() + 
     labs(x='Dias',  
-        y="Proporção de 'clickthrough rate'", 
+        y="'clickthrough rate' (sem buscas vazias)", 
         title="Proporção Diária de 'clickthrough rate'", 
         color='Grupos',
-        linetype='Primeira Busca Mal-Sucedida',
         subtitle="(day, proportion)", 
         caption="Wikimedia Foundation") +
     theme(plot.title = element_text(face="bold",size = "17"),
@@ -185,24 +186,75 @@ sessions %>%
         axis.title.y = element_text(size="15"),
         axis.text.x = element_text(size="12"),
         axis.text.y = element_text(size="12"),
+        legend.position="top",
         panel.border=element_blank())
 ```
 
+Se incluirmos apenas sessões com uma única busca e zero resultados, o que vemos evidencia ainda mais a hipótese de *outliers*. Diferente do que se esperava, ainda é possível visualizar resultados no gráfico (veja abaixo), e na mesma proporção (baixa). Isto argumenta contra a hipótese de que buscas vazias e com visitas sejam ecos de buscas anteriores.
 
-### Q2. Quais resultados da busca (posições) as pessoas tendem a tentar primeiro? Como isto varia dia após dia?
+```{r}
+sessions %>% 
+    group_by(group, day) %>% 
+    summarise(proportion = sum(visited == 1 & last_search == 1 & results == 0)/n()) %>% 
+        ggplot(aes(x = day, y = proportion, color = group)) + 
+        geom_step() + 
+    labs(x='Dias',  
+        y="'clickthrough rate'", 
+        title="Proporção Diária de 'clickthrough rate'", 
+        color='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "17"),
+        plot.subtitle = element_text(size = "12"),
+        plot.caption = element_text(size="12"),
+        axis.title.x = element_text(size ="15"),
+        axis.title.y = element_text(size="15"),
+        axis.text.x = element_text(size="12"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
 
-Para esta pergunta utilizaremos um gráfico de disperssão com um pequeno *jitter* para facilitar a visualização. Tal como na primeira questão, nossa intenção é visualizar a distribuição de uma variável (`first_click`) dia após dia. Aqui incluímos uma diferenciação por grupos apenas para enriquecer nossa análise.
+De fato, não temos total clareza a respeito do que tratam os dados. A variável `group` traz as marcas "a" e "b" que são um tanto obscuras levando em consideração apenas a descrição da tarefa oferecida pela Fundação Wikimedia.
 
+Com base nas estratégias de filtragem propostas (`results` > 0) e distribuindo nossa proporção agora por dias de semana em um gráfico de barras (gráfico abaixo), observamos um aumento bastante sutil o acesso aos resultados de busca no meio da semana (terça a sexta) em relação ao fim de semana dentro do grupo "a", ao contrário do grupo "b", onde ocorre a tendência oposta (mais acessos de sexta a segunda).
+
+```{r}
+sessions %>% 
+    group_by(group, day) %>% 
+    arrange(day) %>%
+    summarise(proportion = sum(visited == 1 & results > 0)/n()) %>% 
+        ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
+        geom_col(position = "dodge") + 
+    labs(x='Dias da semana',  
+        y="'clickthrough rate'", 
+        title="Proporção Diária de 'clickthrough rate'", 
+        color='Grupos',
+        fill='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "17"),
+        plot.subtitle = element_text(size = "12"),
+        plot.caption = element_text(size="12"),
+        axis.title.x = element_text(size ="15"),
+        axis.title.y = element_text(size="15"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
+
+### Q2. Quais resultados da busca (posições) as pessoas tendem a seguir primeiro? Como isto varia dia após dia?
+
+Para esta pergunta utilizaremos um gráfico de dispersão com um pequeno *jitter* para facilitar a visualização. Tal como na primeira questão, nossa intenção é visualizar a distribuição de uma variável (`first_click`) dia após dia. Aqui incluímos uma diferenciação por grupos apenas para enriquecer nossa análise.
 
 ```{r message=FALSE, warning=FALSE}
 buscas %>% 
-    # mutate(first_click[is.na(first_click)] <- 0) %>% 
-    # filter(group == "b") %>% 
     group_by(group, day) %>% 
-    ggplot(aes(x = day, y = first_click, color = group)) + 
-    geom_jitter(height = .05, width = .3, alpha = 0.5) + #(fill = "darkcyan", color = "darkcyan")
+    ggplot(aes(x = format(day, "%m-%d %a"), y = first_click, color = group)) + 
+    geom_jitter(height = .05, width = .3, alpha = 0.3) + 
     scale_y_log10()+
-    labs(x='Dias',  
+    labs(x='Dias da semana',  
         y="Primeiro Click", 
         title="Posição do Primeiro Clique nos Resultados da Busca", 
         color='Grupos',
@@ -213,25 +265,52 @@ buscas %>%
         plot.caption = element_text(size="12"),
         axis.title.x = element_text(size ="15"),
         axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
+        legend.position="top",
         panel.border=element_blank())
 ```
 
-Não é difícil prever que o primeiro resultado receberá mais cliques (como o gráfico acima apresenta), afinal o objetivo é este. Mas, observando com cuidado, o grupo "b" não segue a risca está lógica. Sua proporção é bem menos tendencios à primeira posição. Esta nova observação argumenta a favor da possibilidade de haver uma diferença funcional um pouco mais profunda entre os dois grupos, levando as buscas "a" a serem melhor-sucedidas.
+Não é difícil prever que os primeiros resultados da busca receberam mais cliques (como o gráfico acima apresenta). Porém, a sexta-feira apresenta um padrão atípico, com um conjunto de buscas "desgarrado" das primeiras posições. Isto pode indicar a atividade de um robô de busca, algum processo agendado ou mesmo um padrão verdadeiro ligado ao início do fim de semana.
+
+Seguindo nossa estratégia de filtro de **Q1** (`results` > 0), percebemos que a tendência não se altera muito, veja:
+
+```{r message=FALSE, warning=FALSE}
+buscas %>% # neste caso a proporção de 1s diminui bastante
+    filter(results > 0) %>% 
+    group_by(group, day) %>% 
+    mutate(first_click[is.na(first_click)] <- 0) %>% 
+    ggplot(aes(x = format(day, "%m-%d %a"), y = first_click, color = group)) + 
+    geom_jitter(height = .05, width = .3, alpha = 0.3) + 
+    scale_y_log10()+
+    labs(x='Dias da semana',  
+        y="Primeiro Click", 
+        title="Posição do Primeiro Clique nos Resultados da Busca", 
+        color='Grupos',
+        subtitle="(day, first_click)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "17"),
+        plot.subtitle = element_text(size = "12"),
+        plot.caption = element_text(size="12"),
+        axis.title.x = element_text(size ="15"),
+        axis.title.y = element_text(size="15"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
 
 Uma alternativa para tentar equilibrar os resultados poderia ser eliminar todas as buscas que só tiveram um clique. Neste caso nosso questionamento mudaria um pouco. Ao invés de perguntar qual posição é mais clicada pelo usuário das buscas, estaríamos questionando: caso o usuário clique mais de uma vez, qual posição é mais clicada. Veja o gráfico abaixo.
 
 ```{r message=FALSE, warning=FALSE}
 buscas %>% # neste caso a proporção de 1s diminui bastante
-    # mutate(first_click[is.na(first_click)] <- 0) %>% 
     filter(num_clicks > 1) %>% 
     group_by(group, day) %>% 
     mutate(first_click[is.na(first_click)] <- 0) %>% 
-    ggplot(aes(x = day, y = first_click, color = group)) + 
-    geom_jitter(height = .05, width = .3, alpha = 0.3) + #(fill = "darkcyan", color = "darkcyan")
+    ggplot(aes(x = format(day, "%m-%d %a"), y = first_click, color = group)) + 
+    geom_jitter(height = .05, width = .3, alpha = 0.3) + 
     scale_y_log10()+
-    labs(x='Dias',  
+    labs(x='Dias da semana',  
         y="Primeiro Click", 
         title="Posição do Primeiro Clique nos Resultados da Busca", 
         color='Grupos',
@@ -242,23 +321,48 @@ buscas %>% # neste caso a proporção de 1s diminui bastante
         plot.caption = element_text(size="12"),
         axis.title.x = element_text(size ="15"),
         axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
+        legend.position="top",
         panel.border=element_blank())
 ```
 
-Lamentavelmente, a amostra não contém nenhum registro do grupo "b" com mais de um clique. Isto poderia expor um desequilíbrio em volta da primeira posição muito maior. Porém, perceba que mesmo o grupo "a" que apresentava um comportamento bastante típico, agora está bem mais disperso entre as dez primeiras posições.
+Lamentavelmente, restou pouquíssimos casos atribuidos ao grupo "b". Mesmo assim, perceba que há um padrão muito mais claro aqui. A terça, a quarta e a quinta-feira, dias 01, 02 e 03 de Março, tem muito mais acessos que os demais dias na amostra. Como a terça-feira do dia 08 de Março não segue a mesma regra, é pouco provável que estejamos falando de um padrão que se repete semanalmente. Ou algo atípico ocorreu durante estes dias, ou a atividade de *logging* que gerou a amostra é tendenciosa para estes dias. Para tirar esta dúvida vamos apelar para um histograma a fim de observar a densidade da amostra para cada dia. 
 
+```{r message=FALSE, warning=FALSE}
+buscas %>% # neste caso a proporção de 1s diminui bastante
+    group_by(day) %>% 
+    ggplot(aes(x = format(day, "%m-%d %a"))) + 
+    geom_bar(color = "darkcyan", fill = "darkcyan") + 
+    scale_y_log10()+
+    labs(x='Dias da semana',  
+        y="Desidade", 
+        title="Desidade da Amostra a cada Dia", 
+        color='Grupos',
+        subtitle="(day, density)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "17"),
+        plot.subtitle = element_text(size = "12"),
+        plot.caption = element_text(size="12"),
+        axis.title.x = element_text(size ="15"),
+        axis.title.y = element_text(size="15"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
 
-### Q3. Qual nossa *zero results rate* geral diária? Como isto varia entre os grupos?
+Veja que a amostra é bastante homogênea. Neste caso, podemos afirmar que o número de cliques em resultados de busca é bem maior nos três primeiros dias de nossa amostra, mas não na terça, quarta e quinta-feira repetidamente (a ultima terça feira não corresponde ao padrão).
 
-A *zero results rate* geral diária representa o número de buscas que não retornaram resultados em um dado dia ou, descrevendo de modo mais intuitivo, as buscas que fracassaram. Podemos distribuir esta tava em um gráfico de colunas diárias. A cada dia é apresentada a taxa de fracasso em buscas para o grupo "a" e "b" usando colunas paralelas. Veja abaixo.
+### Q3. Qual é a *zero results rate* geral diária? Como isto varia entre os grupos?
+
+A *zero results rate* geral diária representa o número de buscas que não retornaram resultados em um dado dia ou, descrevendo de modo mais intuitivo, as buscas que fracassaram. Podemos distribuir esta variável em um gráfico de colunas diárias. A cada dia é apresentada a taxa de fracassos em buscas para os grupos "a" e "b" usando colunas paralelas. Veja abaixo.
 
 ```{r message=FALSE, warning=FALSE}
 buscas %>% # fracasso maior quase sempre em "a"
     group_by(group, day) %>% 
     summarise(proportion = sum(results == 0)/n()) %>% 
-    ggplot(aes(x = day, y = proportion, color = group, fill=group)) + 
+    ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
     geom_col(position = "dodge")+
     labs(x='Dias',  
         y="Fracasso", 
@@ -272,17 +376,43 @@ buscas %>% # fracasso maior quase sempre em "a"
         plot.caption = element_text(size="12"),
         axis.title.x = element_text(size ="15"),
         axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
+        legend.position="top",
         panel.border=element_blank())
 ```
 
-Observe que a taxa de fracasso, salvo raras excessões, é sempre maior para o grupo "a". Isto é mais uma evidência de que haja uma diferença mais funcional entre os dois grupos.
+Observe que, salvo nos dois ultimos dias, a taxa de *zero results rate* do grupo "a" praticamente inexiste, já nestes dias, por algum motivo, aproximam-se de 20%. Já para o grupo "b", este valor varia entre algo em torno de 17% e quase zero alternadamente.
 
+Reforçando o que foi identificado na análise até agora. Observando apenas buscas fracassadas (sem resultados) e com cliques, o gráfico abaixo mostra que o grupo "b" não apresenta este tipo de *outlier*, diferente de "a". Isto pode ser tomado como uma evidência da diferença funcional entre os dois grupos.
 
-### Q4. Tendo a duração da sessão como a diferença entre o primeiro e o ultimo evento em uma sessão. Esolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualize o relacionamento.
+```{r message=FALSE, warning=FALSE}
+buscas %>% # fracasso maior quase sempre em "a"
+    group_by(group, day) %>% 
+    summarise(proportion = sum(results == 0 & num_clicks > 0)/n()) %>% 
+    ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
+    geom_col(position = "dodge")+
+    labs(x='Dias',  
+        y="Fracasso", 
+        title="Proporção Diária de Fracasso em Buscas", 
+        color='Grupos',
+        fill='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "17"),
+        plot.subtitle = element_text(size = "12"),
+        plot.caption = element_text(size="12"),
+        axis.title.x = element_text(size ="15"),
+        axis.title.y = element_text(size="15"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
 
-...
+### Q4. Tendo a duração da sessão como a diferença entre o primeiro e o último evento em uma sessão. Escolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualize o relacionamento.
+
+Tendo em vista o grande número de sessões de comprimento zero nos dados, à princípio vamos compara a variável `group` com os valores iguais a zero e diferentes de zero da variável `session_legth`.
 
 ```{r message=FALSE, warning=FALSE}
 sessions %>% 
@@ -303,7 +433,7 @@ sessions %>%
         title="Sessões de Buscas Duráveis e Instantâneas", 
         color='Grupos',
         fill='Grupos',
-        subtitle="(grupos, n)", 
+        subtitle="(group, density)", 
         caption="Wikimedia Foundation") +
     theme(plot.title = element_text(face="bold",size = "17"),
         plot.subtitle = element_text(size = "12"),
@@ -315,11 +445,16 @@ sessions %>%
         panel.border=element_blank())
 ```
 
+Perceba que o grupo "b" possui quase o triplo de sessões instantâneas em relação às duradouras, já no grupo "a" não existem sessões instantâneas. Isto nos dá uma nova evidência de que "a" e "b" dizem respeito a algum tipo de experimento, sendo "a" o grupo de controle e "b" o grupo experimental (comporetamento atípico).
+
+Comparando agora a duração da sessão (descartando sessões instantâneas) com o dia em que ela se inicia (`session_legth` e `day`, veja o gráfico), percebemos uma distribuição bastante homogênea com uma média e desvio padrão muito semelhantes dia após dia. Porém ligeiramente diferentes entre grupos, com "a" em média mais duradoura que "b". 
+
 ```{r message=FALSE, warning=FALSE}
 sessions %>% 
     filter(session_legth > 0) %>%
-    ggplot(aes(x = day, y = session_legth, color = group))  + 
+    ggplot(aes(x = format(day, "%m-%d %a"), y = session_legth, color = group, fill=group))  + 
     geom_jitter(height = .05, width = .3, alpha = 0.3) +
+    geom_boxplot(outlier.alpha = .0, color = "darkcyan") +
     scale_y_log10()+
     labs(x="Dias",  
         y="Duração da Sessão", 
@@ -332,10 +467,16 @@ sessions %>%
         plot.caption = element_text(size="12"),
         axis.title.x = element_text(size ="15"),
         axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
         axis.text.y = element_blank(),
+        legend.position="top",
         panel.border=element_blank())
 ```
 
-# Sumário Executivo
+# Sumário
 
+A partir das quatro questões propostas levantamos hipóteses interessantes a respeito da natureza dos dados, chegamos a algumas conclusões úteis e pudemos entender melhor como estes estão correlacionados. Com base em **Q1** e o cálculo das sessões de buscas com acesso a resultados (cliques) pudemos ver uma grande discrepância nas proporções entre os grupos "a" e "b", o que sugere uma diferença funcional entre estas duas categorias. Encontramos resultado atípicos como buscas sem resultados e, mesmo assim, com acesso a *links* (que não existiam). Além de notarmos uma sutil melhora na taxa de cliques no meio da semana em relação ao fim de semana para "a" e o oposto para "b".
+
+Em **Q2**, percebemos que as pessoas tendem a dar preferência às primeiras opções dos resultados de busca, como era de se esperar. Além disto, observamos que, nos três primeiros dias da amostra, há um volume muito maior de usuários que clicaram mais de uma vez nos resultados. Já em **Q3**, notamos que o grupo "a" tem buscas sem resultados apenas nos dois ultimos dias da amostra, já "b", reforçando uma diferença mais profunda entre os dois grupos, oscila entre ter resultados vazios (em torno de 17%) e não ter, em dias diferentes. Além de identificarmos buscas vazias com cliques (apenas em "a"), já mencionados em **Q1**.
+
+Por fim, **Q4** analisou a duração de sessões, e logo no início da análise percebemos que o grupo "a" não apresentou sessões instantâneas (duração = 0), diferente de "b", o que pode sugerir que "b" não seja fruto de buscas convencionais. Além disto, descartando sessões instantâneas tanto em "a" quanto em "b", a distribuição dos tempos é bastante homogênea dia após dia, porém ligeiramente diferente entre os grupos.
