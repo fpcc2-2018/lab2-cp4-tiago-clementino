@@ -2,9 +2,9 @@
 
 ## Sessões, Buscas e Navegação [Wikimedia Foundation]
 
-Este repositório traz uma análise de padrões de busca e navegação em páginas da wikimedia (provavelmente wikipedia). Este objetivo foi proposto como exerício prático número 2.4 da disciplina FPCC1, no curso de [pós-graduação em Ciência da Computação](http://www.computacao.ufcg.edu.br/pos-graduacao) da [UFCG](http://www.ufcg.edu.br).
+Este repositório traz uma análise de padrões de busca e navegação em páginas da wikimedia (provavelmente wikipedia). Este objetivo foi proposto para os exerício práticos número 2.4 e 3.1 da disciplina FPCC02, no curso de [pós-graduação em Ciência da Computação](http://www.computacao.ufcg.edu.br/pos-graduacao) da [UFCG](http://www.ufcg.edu.br).
 
-Foi seguido o [exercício original de análise](https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016), um problema proposto pela Wikimedia "for candidates applying to be a Data Analyst in the Discovery department at Wikimedia Foundation." O README do projeto original descreve as análises pedidas aos interessados na posição.
+Seguindo o [exercício original de análise](https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016), que trata de um problema proposto pela Wikimedia "for candidates applying to be a Data Analyst in the Discovery department at Wikimedia Foundation." O README do projeto original descreve as análises pedidas aos interessados na posição.
 
 ## Organização
 
@@ -16,7 +16,7 @@ Foi seguido o [exercício original de análise](https://github.com/wikimedia-res
 
 ## Relatório
 
-Este relatório foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada [aqui](http://rpubs.com/tiago_clementino/384699).
+O relatório referente à tarefa 2.4 foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada [aqui](http://rpubs.com/tiago_clementino/384699). Já aquele referente à tarefa 3.1, [aqui](), trata do mesmo problema, ou seja, responder às três questões de análise, deixando a quarta questão de lado e incluindo uma outra que seria semelhante à primeira. Nesta questão, ao invés de fazer a análise em função dos grupos 'a' e 'b', tal como na **Q1** original, criamos dois novos grupos e analisamos em função deles. Tais grupos seriam partições randômicas do grupo 'a'.
 
 ## Os dados
 
@@ -24,7 +24,7 @@ O script `code/import-events_to_searches.R` é usado para tratar os dados de mod
 
 ## Dependências
 
-O relatório que descreve esta tarefa foi compilado no seguinte ambiente:
+Os relatórios que descrevem tais tarefaa foram compilados no seguinte ambiente:
 
 - [Microsoft Windows 10](https://www.microsoft.com/pt-br/software-download/windows10)
 - [R 3.5.0](https://www.r-project.org/)
@@ -36,6 +36,8 @@ Na IDE do RStudio, instale os seguintes pacotes:
 - `prettydoc`
 - `lubridate`
 - `here`
+- `boot`
+- `gridExtra`
 
 ## Procedimento para Replicação do Relatório
 
@@ -44,5 +46,13 @@ Na IDE do RStudio, instale os seguintes pacotes:
 3. inicie a IDE RStudio.
 4. Abra o projeto ".\exercicio-wikimedia.Rproj".
 3. Abra o arquivo ".\dados\import-events_to_searches.R". Em seguida clique em "Run" (canto superior direito do editor). Isto pode levar algum tempo (é necessário ter conexão com a Internet).
+
+# Para a tarefa 2.4
+
 4. Abra o arquivo ".\reports\lab-2-checkpoint-4.2.Rmd". Clique em "Knit" (canto superior esquerdo do editor). Dentre as opções apresentadas, selecione "knit to html_pretty".
 5. O resultado será exibido e estará disponível em ".\reports\lab-2-checkpoint-4.2.html".
+
+# Para a tarefa 3.1
+
+4. Abra o arquivo ".\reports\lab-3-checkpoint-1.2.Rmd". Clique em "Knit" (canto superior esquerdo do editor). Dentre as opções apresentadas, selecione "knit to html_pretty".
+5. O resultado será exibido e estará disponível em ".\reports\lab-3-checkpoint-1.2.html".

@@ -1,0 +1,1637 @@
+---
+title: "FPCC02"
+subtitle: "Inferência via ICs"
+author:
+- name: "Tiago Clementino"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  prettydoc::html_pretty:
+    toc: true
+    theme: leonids
+    highlight: vignette
+    fig_width: 6 
+    fig_height: 4.5 
+    keep_tex: yes
+vignette: >
+  %\VignetteIndexEntry{Creating Pretty Documents from R Markdown - The Leonids Theme}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+>Abstract
+>
+> A exploratory report involving an analysis task proposed by Wikimedias Foundation. The work described here aims to find specific relationships between the properties present in the data using confidence intervals and bootstrap. The result is some useful conclusions that may be reached only on the basis of the available information in the sample.
+
+```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
+library(tidyverse)
+library(here)
+library(lubridate)
+library(boot)
+library(gridExtra)
+```
+
+```{r read, include=FALSE}
+buscas = read_csv(here::here("data/search_data.csv"))
+
+#buscas = buscas %>% 
+#    mutate(day = round_date(session_start_date, unit = "day"))
+```
+# Objetivo
+
+Vamos reproduzir um problema de exploração de dados que a Fundação Wikimedia usou em 2016 no recrutamento de pessoas para trabalhar em seu departamento de descoberta. O objetivo é seguir as instruções colocadas na tarefa original, respondendo as 4 perguntas que são colocadas.
+
+Neste laboratório, o objetivo é explorar as possibilidades da inferência estatística por intervalos de confiança. A entrega consiste de um relatório explorando por inferência em IC as três primeiras perguntas do problema proposto pela Wikimedia. Além de uma análise da pergunta 01, agora comparando o grupo A internamento (dividido de forma aleatória), também por inferência em IC. 
+
+
+### Contexto
+
+O departamento de descoberta da Fundação Wikimedia utiliza um registro de eventos (Event Logging, EL) para avaliar várias métricas de performance e usabilidade, ajudando-os a tomar decisões. Principalmente, este departamento está interessado em:
+
+
+* *clickthrough rate*: a proporção de sessões de busca onde o usuário clica em um dos resultados apresentados.
+
+* *zero results rate*: a proporção de buscas que não tiveram resultados.
+
+
+e outras métricas fora do escopo desta tarefa. EL usa Javascript para enviar mensagens aos servidores da Wikimedia de forma assíncrona quando o usuário realiza ações específicas. Nesta tarefa irei analisar um subconjunto de nosso registro de eventos.
+
+
+### Dados
+
+O conjunto de dados vem de uma estratégia de EL usada para avaliar a satisfação do usuário. Usuários *standalone* são randomicamente coletados para ser anonimamente rastreados por tal estratégia, que usa um sistema de descoberta do tipo *I'm alive* para estimar quanto tempo os usuários permanecem nas páginas que eles visitam. O conjunto de dados contém em tabela pouco mais de uma semana de EL com as seguintes colunas.
+
+| Campo              | Tipo    | Descrição                                                                         |
+|--------------------|---------|-----------------------------------------------------------------------------------|
+| `uuid`             | string  | Identificador universal único (UUID) para gerenciamento dos registros.            |
+| `timestamp`        | integer | Data e hora (UTC) do evento com a seguinte formatação: YYYYMMDDhhmmss.            |
+| `session_id`       | string  | Um identificador individual de sessão único.                                      |
+| `group`            | string  | Uma marca ("a" ou "b").                                                           |
+| `action`           | string  | Identifica a natureza do evento em que foi criado. Veja abaixo.                   |
+| `checkin`          | integer | Quantos segundos a página passou aberta.                                          |
+| `page_id`          | string  | Um identificador único relacionado às páginas visitadas e verificadas.            |
+| `n_results`        | integer | Número de sugestões de páginas retornado. Apenas para eventos searchResultPage.   |
+| `result_position`  | integer | A posição do link na SERP (Search Engine Results Page) para a página visitada.    |
+
+
+O campo `action` pode ter os seguintes valores:
+
+
+* `searchResultPage`: quando uma nova busca é realizada e uma SERP é apresentado ao usuário.
+
+* `visitPage`: quando o usuário clica em um *link* dos resultados.
+
+* `checkin`: quando o usuário permaneceu em uma página por um intervalo de tempo pré-definido.
+
+
+### Descrição do objetivo
+
+O objetivo aqui é criar um relatório reproduzível respondendo por inferência estatística m IC, de acordo com os dados, as seguintes perguntas:
+
+
+ - **Q1**. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
+
+ - **Q2**. Quais resultados da busca (posições) as pessoas tendem a seguir primeiro? Como isto varia dia após dia?
+
+ - **Q3**. Qual é a *zero results rate* geral diária? Como isto varia entre os grupos?
+ 
+ - **Q1.alternativa**. Responda **Q1** novamente, porém utilize apenas o grupo A, o dividindo randomicamente em dois grupos A e A'.
+
+
+*A questão **Q4** descrita na tarefa da Wikimedia foge ao escopo deste relatório.
+
+
+### Dados tratados
+
+Para Facilitar nosso esforço em resolver as quatro questões, tratei os dados utilizando o script "import-events_to_searches.R" (editado a partir da versão inicial presente no repositório original do *lab 02 checkpoint 04*). As informações que antes eram referentes a eventos pontuais, agora foram agrupadas em buscas (com possivelmente mais de um evento). Os novos dados, agora simplificados e mais fáceis de tratar, estão dispostos em uma tabela com as seguintes colunas:
+
+
+| Campo                      | Tipo    | Descrição                                                             |
+|----------------------------|---------|-----------------------------------------------------------------------|
+| `search_index`             | integer | Um contator que marca cada uma das buscas em uma sessão               |
+| `session_start_timestamp`  | integer | Data e hora de início da sessão correspondente                        |
+| `day`                      | date    | Data da sessão correspondente                                         |
+| `session_legth`            | integer | Duração da sessão contada em segundos                                 |
+| `last_search`              | integer | Última busca realizada na sessão (ultimo `search_index`)              |
+| `group`                    | string  | Uma marca de grupo ("a" e "b")                                        |
+| `results`                  | integer | Número de resultados da busca                                         |
+| `num_clicks`               | integer | Número de páginas acessadas na busca                                  |
+| `first_click`              | integer | Posição do primeiro click                                             |
+
+
+# Questões
+
+
+### Q1. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
+
+Algo crucial para começarmos a responder esta questão é calcular a taxa de cliques por sessão de busca. Como a taxa é por sessão, agrupar os dados desta forma é um bom primeiro passo. Enquanto ocorre este agrupamento criamos uma nova variável que ajudam na tarefa de analisar a taxa de cliques: `visited` para identificar facilmente qual sessão teve ou não cliques (1 ou 0). `results` e `num_clicks` somam as variáveis originais de mesmo nome, agrupando por sessão.
+
+```{r}
+sessions = buscas %>% #agrupando por sessão
+    group_by(group, day, session_id) %>% 
+    summarise(visited = ifelse(sum(num_clicks) > 0, 1, 0),
+              session_legth = first(session_legth),
+              last_search = first(last_search),
+              results = sum(results, na.rm = TRUE),
+              num_clicks = sum(num_clicks, na.rm = TRUE), 
+              first_search_zero = ifelse(first(results)==0, "Sim", "Não"))
+```
+
+Aqui, partindo da premissa que os dados em questão dizem respeito a uma amostra e utilizando o método *bootstrap*, podemos estimar a distribuição amostral da média da variável `visited` geral e por grupo. Além disto, para observar uma diferença pareada entre os grupos "a" e "b", vamos estimar também a diferença entre as médias de "a" e "b" para `visited`, observe:
+
+```{r}
+
+funcao_bootstrap_1_geral <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(mean(d[1]))
+}
+
+funcao_bootstrap_1_a <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(mean(d[1]))
+}
+
+funcao_bootstrap_1_b <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(mean(d[2]))
+}
+
+funcao_bootstrap_1_a_b <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+bootstraps_1_geral <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_1_geral,
+                   R = 200) 
+
+bootstraps_1_a <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_1_a,
+                   R = 200) 
+
+bootstraps_1_b <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_1_b, 
+                   R = 200) 
+
+bootstraps_1_a_b <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_1_a_b, 
+                   R = 200) 
+
+```
+
+```{r }
+
+p1 <- tibble(estatistica = as.double(bootstraps_1_geral$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue") + 
+    labs(x="'clickthrough rate'",  
+        y=NULL, 
+        title="Distribuição da 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p2 <- tibble(estatistica = as.double(bootstraps_1_a$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue")  + 
+    labs(x="'clickthrough rate' para o grupo 'a'",  
+        y=NULL, 
+        title="Distribuição da 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p3 <- tibble(estatistica = as.double(bootstraps_1_b$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue") + 
+    labs(x="'clickthrough rate' para o grupo 'b'", 
+        y=NULL, 
+        title="Distribuição da 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p4 <- tibble(estatistica = as.double(bootstraps_1_a_b$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue") + 
+    labs(x="diferença entre 'a' e 'b'", 
+        y=NULL, 
+        title="Distribuição da diferença de buscas vazias", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+
+grid.arrange(arrangeGrob(p1,p4,ncol=2,widths=c(2,2)),
+    arrangeGrob(p2,p3,ncol=2,widths=c(2,2)),
+    heights=c(2,2))
+
+```
+
+Veja que todas as distribuições seguem a regra normal. A partir daqui seguiremos dois caminhos. No primeiro buscamos estimar o comportamento da média de cliques geral dia a dia. Uma análise que diz respeito apenas à variável `visited`. No passo seguinte, faremos uma análise da diferença pareada desta variável entre grupos, também dia após dia.
+
+```{r}
+
+
+
+
+funcao_bootstrap_geral_0301 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0302 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-02') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0303 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-03') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0304 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-04') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0305 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-05') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0306 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-06') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0307 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-07') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_geral_0308 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-08') %>%
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+bootstraps_geral_0301 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0301, 
+                   R = 200) 
+
+bootstraps_geral_0302 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0302, 
+                   R = 200) 
+
+bootstraps_geral_0303 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0303,
+                   R = 200) 
+
+bootstraps_geral_0304 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0304,  
+                   R = 200) 
+
+bootstraps_geral_0305 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0305, 
+                   R = 200)
+
+bootstraps_geral_0306 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0306,
+                   R = 200) 
+
+bootstraps_geral_0307 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0307, 
+                   R = 200) 
+
+bootstraps_geral_0308 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_geral_0308, 
+                   R = 200) 
+
+ci_geral_0301 <- boot.ci(bootstraps_geral_0301, conf = 0.95, type = "basic")
+
+ci_geral_0302 <- boot.ci(bootstraps_geral_0302, conf = 0.95, type = "basic")
+
+ci_geral_0303 <- boot.ci(bootstraps_geral_0303, conf = 0.95, type = "basic")
+
+ci_geral_0304 <- boot.ci(bootstraps_geral_0304, conf = 0.95, type = "basic")
+
+ci_geral_0305 <- boot.ci(bootstraps_geral_0305, conf = 0.95, type = "basic")
+
+ci_geral_0306 <- boot.ci(bootstraps_geral_0306, conf = 0.95, type = "basic")
+
+ci_geral_0307 <- boot.ci(bootstraps_geral_0307, conf = 0.95, type = "basic")
+
+ci_geral_0308 <- boot.ci(bootstraps_geral_0308, conf = 0.95, type = "basic")
+
+```
+
+```{r}
+
+
+
+
+funcao_bootstrap_0301 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0302 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-02') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0303 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-03') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0304 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-04') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0305 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-05') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0306 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-06') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0307 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-07') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_0308 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-08') %>%
+      group_by(group) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+bootstraps0301 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0301,
+                   R = 200)
+
+bootstraps0302 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0302, 
+                   R = 200)
+
+bootstraps0303 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0303, 
+                   R = 200) 
+
+bootstraps0304 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0304, 
+                   R = 200) 
+
+bootstraps0305 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0305,
+                   R = 200) 
+
+bootstraps0306 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0306,
+                   R = 200) 
+
+bootstraps0307 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0307,  
+                   R = 200)
+
+bootstraps0308 <- boot(data = sessions, 
+                   statistic = funcao_bootstrap_0308,
+                   R = 200)
+
+ci0301 <- boot.ci(bootstraps0301, conf = 0.95, type = "basic")
+
+ci0302 <- boot.ci(bootstraps0302, conf = 0.95, type = "basic")
+
+ci0303 <- boot.ci(bootstraps0303, conf = 0.95, type = "basic")
+
+ci0304 <- boot.ci(bootstraps0304, conf = 0.95, type = "basic")
+
+ci0305 <- boot.ci(bootstraps0305, conf = 0.95, type = "basic")
+
+ci0306 <- boot.ci(bootstraps0306, conf = 0.95, type = "basic")
+
+ci0307 <- boot.ci(bootstraps0307, conf = 0.95, type = "basic")
+
+ci0308 <- boot.ci(bootstraps0308, conf = 0.95, type = "basic")
+
+```
+
+```{r }
+
+
+ci_geral_0301_ <- tibble(estatistica = as.double(ci_geral_0301$t0),basic_1 = as.double(ci_geral_0301$basic[4]), basic_2 = as.double(ci_geral_0301$basic[5]), day = '03-01 Ter') 
+
+ci_geral_0302_ <- tibble(estatistica = as.double(ci_geral_0302$t0),basic_1 = as.double(ci_geral_0302$basic[4]), basic_2 = as.double(ci_geral_0302$basic[5]), day = '03-02 Qua') 
+
+ci_geral_0303_ <- tibble(estatistica = as.double(ci_geral_0303$t0),basic_1 = as.double(ci_geral_0303$basic[4]), basic_2 = as.double(ci_geral_0303$basic[5]), day = '03-03 Qui') 
+
+ci_geral_0304_ <- tibble(estatistica = as.double(ci_geral_0304$t0),basic_1 = as.double(ci_geral_0304$basic[4]), basic_2 = as.double(ci_geral_0304$basic[5]), day = '03-04 Sex') 
+
+ci_geral_0305_ <- tibble(estatistica = as.double(ci_geral_0305$t0),basic_1 = as.double(ci_geral_0305$basic[4]), basic_2 = as.double(ci_geral_0305$basic[5]), day = '03-05 Sáb') 
+
+ci_geral_0306_ <- tibble(estatistica = as.double(ci_geral_0306$t0),basic_1 = as.double(ci_geral_0306$basic[4]), basic_2 = as.double(ci_geral_0306$basic[5]), day = '03-06 Dom') 
+
+ci_geral_0307_ <- tibble(estatistica = as.double(ci_geral_0307$t0),basic_1 = as.double(ci_geral_0307$basic[4]), basic_2 = as.double(ci_geral_0307$basic[5]), day = '03-07 Seg') 
+
+ci_geral_0308_ <- tibble(estatistica = as.double(ci_geral_0308$t0),basic_1 = as.double(ci_geral_0308$basic[4]), basic_2 = as.double(ci_geral_0308$basic[5]), day = '03-08 Ter') 
+
+populacao_1_geral = bind_rows(ci_geral_0301_, ci_geral_0302_, ci_geral_0303_, ci_geral_0304_, ci_geral_0305_, ci_geral_0306_, ci_geral_0307_, ci_geral_0308_)
+
+
+ci0301_ <- tibble(estatistica = as.double(ci0301$t0),basic_1 = as.double(ci0301$basic[4]), basic_2 = as.double(ci0301$basic[5]), day = '03-01 Ter') 
+
+ci0302_ <- tibble(estatistica = as.double(ci0302$t0),basic_1 = as.double(ci0302$basic[4]), basic_2 = as.double(ci0302$basic[5]), day = '03-02 Qua') 
+
+ci0303_ <- tibble(estatistica = as.double(ci0303$t0),basic_1 = as.double(ci0303$basic[4]), basic_2 = as.double(ci0303$basic[5]), day = '03-03 Qui') 
+
+ci0304_ <- tibble(estatistica = as.double(ci0304$t0),basic_1 = as.double(ci0304$basic[4]), basic_2 = as.double(ci0304$basic[5]), day = '03-04 Sex') 
+
+ci0305_ <- tibble(estatistica = as.double(ci0305$t0),basic_1 = as.double(ci0305$basic[4]), basic_2 = as.double(ci0305$basic[5]), day = '03-05 Sáb') 
+
+ci0306_ <- tibble(estatistica = as.double(ci0306$t0),basic_1 = as.double(ci0306$basic[4]), basic_2 = as.double(ci0306$basic[5]), day = '03-06 Dom') 
+
+ci0307_ <- tibble(estatistica = as.double(ci0307$t0),basic_1 = as.double(ci0307$basic[4]), basic_2 = as.double(ci0307$basic[5]), day = '03-07 Seg') 
+
+ci0308_ <- tibble(estatistica = as.double(ci0308$t0),basic_1 = as.double(ci0308$basic[4]), basic_2 = as.double(ci0308$basic[5]), day = '03-08 Ter') 
+
+populacao_1 = bind_rows(ci0301_, ci0302_, ci0303_, ci0304_, ci0305_, ci0306_, ci0307_, ci0308_)
+
+
+
+p1<-ggplot(populacao_1, aes(y=estatistica, x=day)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=basic_2, ymin=basic_1), width=0.2) + 
+    labs(x=NULL,  
+        y="'clickthrough rate'", 
+        title="Diferença de 'clickthrough rate' entre grupos", 
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        panel.border=element_blank()) # error bars for means
+
+p2<-ggplot(populacao_1_geral, aes(y=estatistica, x=day)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=basic_2, ymin=basic_1), width=0.2)  + 
+    labs(x=NULL,  
+        y="'clickthrough rate'", 
+        title="'clickthrough rate' geral diária", 
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        panel.border=element_blank()) # error bars for means
+
+
+grid.arrange(arrangeGrob(p1,p2,ncol=1,widths=c(1)),
+    heights=c(1))
+
+```
+
+Com base no primeiro conjunto de intervalos ("Diferença de `click through rate` entre grupos"), podemos concluir que a diferença de `clickthrough rate` entre grupos é sempre significativa (não inclui zero no intervalo em todos os dias). Além disto, podemos concluir com 95% de confiança que esta diferença está restrita ao intervalo [0.42, 0.56] e se acentua na seguinte ordem parcial:
+
+
+* Para todo x pertencente à {03-01, 03-02, 03-03} e y pertencente à {03-04, 03-05, 03-06,03-07,03-08}, x > y.
+* Para todo x pertencente à {03-01, 03-02, 03-03} e z pertencente à {03-05} e t pertencente à {03-04,03-06}, t > z e t < x.
+
+
+Já a `clickthrough rate` geral (segundo gráfico), à 95% de confiança, estima-se que esteja no intervalo [0.63, 0.7] a cada dia. A única relação de ordem possível entre os dias analisados é que a `click through rate` do dia 03-02 foi maior que a do dia 03-05. Note que, por este método, quando apontamos uma ordem estimada, não podemos apontar magnitude.
+
+De fato, não temos total clareza a respeito do que tratam os dados. A variável `group` traz as marcas "a" e "b" que são um tanto obscuras, levando em consideração apenas a descrição da tarefa oferecida pela Fundação Wikimedia.
+
+Distribuindo nossa proporção em um gráfico de barras (gráfico abaixo), observamos na amostra que a diferença entre os dois grupos diminui a partir da sexta-feira, comportamento já demostrado nos intervalos de confiança.
+
+```{r}
+sessions %>% 
+    group_by(group, day) %>% 
+    arrange(day) %>%
+    summarise(proportion = sum(visited == 1)/n()) %>% 
+        ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
+        geom_col(position = "dodge") + 
+    labs(x='Dias da semana',  
+        y="'clickthrough rate'", 
+        title="Proporção Diária de 'clickthrough rate'", 
+        color='Grupos',
+        fill='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
+
+### Q2. Quais resultados da busca (posições) as pessoas tendem a seguir primeiro? Como isto varia dia após dia?
+
+Não é difícil supor que as pessoas quase sempre clicam primeiro na primeira posição de busca. A ordenação dos resultados é feita para induzir este comportamento. Com isto, proponho a análise descrita abaixo.
+
+Se descartarmos os primeiros cliques na primeira posição (já sabemos como se comporta) e analisarmos apenas os primeiros cliques referentes à primeira ou segunda páginas de resultados (para evitar robôs), podemos ter uma estimativa de como se comporta o usuário quando não está completamente satisfeito com os resultados de busca (quando a primeira opção não é o que ele procura).
+
+Para restringir-se à primeira ou segunda páginas vamos analisar apenas os quinze primeiros resultados da busca. Observe abaixo que esta estatística segue uma distribuição normal, assim como as anteriores.
+
+```{r}
+
+funcao_bootstrap_mean <- function(dado, indices){
+    d = dado %>% 
+      filter(!is.na(first_click),first_click<=15,first_click>1) %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+
+bootstraps_mean <- boot(data = buscas, 
+                   statistic = funcao_bootstrap_mean, 
+                   R = 200) 
+
+
+
+
+tibble(estatistica = as.double(bootstraps_mean$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .005, fill = "white", color="blue") + 
+    labs(x="Proporção do primeiro click na posição 01", 
+        y=NULL, 
+        title="Distribuição de buscas com 'first_click' = 01", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+
+
+
+```
+
+```{r}
+
+buscas_2 <- buscas %>% filter(!is.na(first_click),first_click<=15,first_click>1)
+
+funcao_bootstrap_2_0301 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0302 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-02') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0303 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-03') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0304 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-04') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0305 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-05') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0306 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-06') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0307 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-07') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+funcao_bootstrap_2_0308 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-08') %>%
+      slice(indices) %>% 
+      summarise(position = mean(first_click)) %>% 
+      pull(position)   
+    return(d[1])
+}
+
+bootstraps_2_0301 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0301,  
+                   R = 200)
+
+bootstraps_2_0302 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0302, 
+                   R = 200)
+
+bootstraps_2_0303 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0303, 
+                   R = 200) 
+
+bootstraps_2_0304 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0304, 
+                   R = 200) 
+
+bootstraps_2_0305 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0305,
+                   R = 200)
+
+bootstraps_2_0306 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0306, 
+                   R = 200) 
+
+bootstraps_2_0307 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0307,
+                   R = 200) 
+
+bootstraps_2_0308 <- boot(data = buscas_2, 
+                   statistic = funcao_bootstrap_2_0308,
+                   R = 200) 
+
+
+ci_2_0301 <- boot.ci(bootstraps_2_0301, conf = 0.95, type = "basic")
+
+ci_2_0302 <- boot.ci(bootstraps_2_0302, conf = 0.95, type = "basic")
+
+ci_2_0303 <- boot.ci(bootstraps_2_0303, conf = 0.95, type = "basic")
+
+ci_2_0304 <- boot.ci(bootstraps_2_0304, conf = 0.95, type = "basic")
+
+ci_2_0305 <- boot.ci(bootstraps_2_0305, conf = 0.95, type = "basic")
+
+ci_2_0306 <- boot.ci(bootstraps_2_0306, conf = 0.95, type = "basic")
+
+ci_2_0307 <- boot.ci(bootstraps_2_0307, conf = 0.95, type = "basic")
+
+ci_2_0308 <- boot.ci(bootstraps_2_0308, conf = 0.95, type = "basic")
+
+```
+```{r }
+
+ci_2_0301_ <- tibble(estatistica = as.double(ci_2_0301$t0),basic_1 = as.double(ci_2_0301$basic[4]), basic_2 = as.double(ci_2_0301$basic[5]), day = '03-01 Ter') 
+
+ci_2_0302_ <- tibble(estatistica = as.double(ci_2_0302$t0),basic_1 = as.double(ci_2_0302$basic[4]), basic_2 = as.double(ci_2_0302$basic[5]), day = '03-02 Qua') 
+
+ci_2_0303_ <- tibble(estatistica = as.double(ci_2_0303$t0),basic_1 = as.double(ci_2_0303$basic[4]), basic_2 = as.double(ci_2_0303$basic[5]), day = '03-03 Qui') 
+
+ci_2_0304_ <- tibble(estatistica = as.double(ci_2_0304$t0),basic_1 = as.double(ci_2_0304$basic[4]), basic_2 = as.double(ci_2_0304$basic[5]), day = '03-04 Sex') 
+
+ci_2_0305_ <- tibble(estatistica = as.double(ci_2_0305$t0),basic_1 = as.double(ci_2_0305$basic[4]), basic_2 = as.double(ci_2_0305$basic[5]), day = '03-05 Sáb') 
+
+ci_2_0306_ <- tibble(estatistica = as.double(ci_2_0306$t0),basic_1 = as.double(ci_2_0306$basic[4]), basic_2 = as.double(ci_2_0306$basic[5]), day = '03-06 Dom') 
+
+ci_2_0307_ <- tibble(estatistica = as.double(ci_2_0307$t0),basic_1 = as.double(ci_2_0307$basic[4]), basic_2 = as.double(ci_2_0307$basic[5]), day = '03-07 Seg') 
+
+ci_2_0308_ <- tibble(estatistica = as.double(ci_2_0308$t0),basic_1 = as.double(ci_2_0308$basic[4]), basic_2 = as.double(ci_2_0308$basic[5]), day = '03-08 Ter') 
+
+populacao_2 = bind_rows(ci_2_0301_, ci_2_0302_, ci_2_0303_, ci_2_0304_, ci_2_0305_, ci_2_0306_, ci_2_0307_, ci_2_0308_)
+
+
+ggplot(populacao_2, aes(y=estatistica, x=day)) + 
+  geom_point(size=3) +
+  geom_errorbar(aes(ymax=basic_2, ymin=basic_1), width=0.2) + 
+    labs(x=NULL,  
+        y="Primeiro Click", 
+        title="Posição do Primeiro Clique nos Resultados da Busca", 
+        subtitle="(day, first_click)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        panel.border=element_blank()) 
+
+
+
+```
+
+Perceba que, à 95% de confiança, todos os resultados estão dispostos em [3.3, 3.7], e podemos afirmar que não há diferença significativa dia após dia, portanto, não há meio de ordenação total ou parcial entre eles.
+
+
+### Q3. Qual é a *zero results rate* geral diária? Como isto varia entre os grupos?
+
+A *zero results rate* geral diária representa o número de buscas que não retornaram resultados em um dado dia ou descrevendo de modo mais intuitivo, as buscas que fracassaram. Esta proporção pode ser identificada usando o filtro `results == 0` para contar buscas com esta característica e dividindo pelo total.
+
+Novamente, partindo da premissa que os dados em questão dizem respeito a uma amostra e utilizando o método de *bootstrap*, podemos estimar a distribuição amostral da proporção geral e por grupo. Além disto, para observar uma diferença pareada entre os grupos "a" e "b", vamos estimar também a diferença entre as proporções de "a" e "b" para `results == 0`. Observe:
+
+```{r}
+
+buscas_3 <- buscas %>% filter(!is.na(results)) %>% mutate(  vazio = ifelse(results == 0, 1.0, 0.0)   )
+
+
+funcao_bootstrap_3_geral <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_a <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_b <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[2])
+}
+
+funcao_bootstrap_3_a_b <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1] - d[2])
+}
+
+
+bootstraps_3_geral <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral,
+                   R = 200) 
+
+bootstraps_3_a <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_a, 
+                   R = 200) 
+
+bootstraps_3_b <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_b,  
+                   R = 200)
+
+bootstraps_3_a_b <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_a_b,  
+                   R = 200) 
+
+```
+```{r }
+
+
+p1 <- tibble(estatistica = as.double(bootstraps_3_geral$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .0005, fill = "white", color="blue")  + 
+    labs(x="média de buscas vazias",  
+        y=NULL, 
+        title="Distribuição da média de buscas vazias", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p2 <- tibble(estatistica = as.double(bootstraps_3_a$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .0005, fill = "white", color="blue")  + 
+    labs(x="média de buscas vazias para o grupo 'a'",  
+        y=NULL, 
+        title="Distribuição da média de buscas vazias", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p3 <- tibble(estatistica = as.double(bootstraps_3_b$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .0005, fill = "white", color="blue")  + 
+    labs(x="média de buscas vazias para o grupo 'b'", 
+        y=NULL, 
+        title="Distribuição da média de buscas vazias", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p4 <- tibble(estatistica = as.double(bootstraps_3_a_b$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .0005, fill = "white", color="blue")  + 
+    labs(x="diferença entre 'a' e 'b'", 
+        y=NULL, 
+        title="Distribuição da diferença de buscas vazias", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+
+grid.arrange(arrangeGrob(p1,p4,ncol=2,widths=c(2,2)),
+    arrangeGrob(p2,p3,ncol=2,widths=c(2,2)),
+    heights=c(2,2))
+
+```
+
+Veja que todas as distribuições seguem a regra normal. A partir daqui seguiremos dois caminhos. No primeiro buscamos estimar o comportamento da proporção de fracassos geral dia a dia. Uma análise que diz respeito apenas à variável `results`. No passo seguinte, faremos uma análise da diferença pareada desta variável entre grupos, também dia após dia.
+
+```{r}
+
+
+funcao_bootstrap_3_geral_0301 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0302 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-02') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0303 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-03') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0304 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-04') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0305 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-05') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0306 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-06') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0307 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-07') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+funcao_bootstrap_3_geral_0308 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-08') %>%
+      slice(indices) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1])
+}
+
+bootstraps_3_geral_0301 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0301, 
+                   R = 200) 
+
+bootstraps_3_geral_0302 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0302, 
+                   R = 200) 
+
+bootstraps_3_geral_0303 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0303,
+                   R = 200) 
+
+bootstraps_3_geral_0304 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0304, 
+                   R = 200) 
+
+bootstraps_3_geral_0305 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0305, 
+                   R = 200) 
+
+bootstraps_3_geral_0306 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0306,  
+                   R = 200) 
+
+bootstraps_3_geral_0307 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0307,  
+                   R = 200) 
+
+bootstraps_3_geral_0308 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_geral_0308,  
+                   R = 200) 
+
+
+ci_3_geral_0301 <- boot.ci(bootstraps_3_geral_0301, conf = 0.95, type = "basic")
+
+ci_3_geral_0302 <- boot.ci(bootstraps_3_geral_0302, conf = 0.95, type = "basic")
+
+ci_3_geral_0303 <- boot.ci(bootstraps_3_geral_0303, conf = 0.95, type = "basic")
+
+ci_3_geral_0304 <- boot.ci(bootstraps_3_geral_0304, conf = 0.95, type = "basic")
+
+ci_3_geral_0305 <- boot.ci(bootstraps_3_geral_0305, conf = 0.95, type = "basic")
+
+ci_3_geral_0306 <- boot.ci(bootstraps_3_geral_0306, conf = 0.95, type = "basic")
+
+ci_3_geral_0307 <- boot.ci(bootstraps_3_geral_0307, conf = 0.95, type = "basic")
+
+ci_3_geral_0308 <- boot.ci(bootstraps_3_geral_0308, conf = 0.95, type = "basic")
+
+```
+```{r }
+
+ci_3_geral_0301_ <- tibble(estatistica = as.double(ci_3_geral_0301$t0),basic_1 = as.double(ci_3_geral_0301$basic[4]), basic_2 = as.double(ci_3_geral_0301$basic[5]), day = '03-01 Ter') 
+
+ci_3_geral_0302_ <- tibble(estatistica = as.double(ci_3_geral_0302$t0),basic_1 = as.double(ci_3_geral_0302$basic[4]), basic_2 = as.double(ci_3_geral_0302$basic[5]), day = '03-02 Qua') 
+
+ci_3_geral_0303_ <- tibble(estatistica = as.double(ci_3_geral_0303$t0),basic_1 = as.double(ci_3_geral_0303$basic[4]), basic_2 = as.double(ci_3_geral_0303$basic[5]), day = '03-03 Qui') 
+
+ci_3_geral_0304_ <- tibble(estatistica = as.double(ci_3_geral_0304$t0),basic_1 = as.double(ci_3_geral_0304$basic[4]), basic_2 = as.double(ci_3_geral_0304$basic[5]), day = '03-04 Sex') 
+
+ci_3_geral_0305_ <- tibble(estatistica = as.double(ci_3_geral_0305$t0),basic_1 = as.double(ci_3_geral_0305$basic[4]), basic_2 = as.double(ci_3_geral_0305$basic[5]), day = '03-05 Sáb') 
+
+ci_3_geral_0306_ <- tibble(estatistica = as.double(ci_3_geral_0306$t0),basic_1 = as.double(ci_3_geral_0306$basic[4]), basic_2 = as.double(ci_3_geral_0306$basic[5]), day = '03-06 Dom') 
+
+ci_3_geral_0307_ <- tibble(estatistica = as.double(ci_3_geral_0307$t0),basic_1 = as.double(ci_3_geral_0307$basic[4]), basic_2 = as.double(ci_3_geral_0307$basic[5]), day = '03-07 Seg') 
+
+ci_3_geral_0308_ <- tibble(estatistica = as.double(ci_3_geral_0308$t0),basic_1 = as.double(ci_3_geral_0308$basic[4]), basic_2 = as.double(ci_3_geral_0308$basic[5]), day = '03-08 Ter') 
+
+populacao_3_geral = bind_rows(ci_3_geral_0301_, ci_3_geral_0302_, ci_3_geral_0303_, ci_3_geral_0304_, ci_3_geral_0305_, ci_3_geral_0306_, ci_3_geral_0307_, ci_3_geral_0308_)
+
+```
+```{r}
+
+
+funcao_bootstrap_3_0301 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0302 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-02') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0303 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-03') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0304 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-04') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0305 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-05') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0306 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-06') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0307 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-07') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+funcao_bootstrap_3_0308 <- function(dado, indices){
+    d = dado %>% 
+      filter(format(day, "%m-%d") == '03-08') %>%
+      slice(indices) %>% 
+      group_by(group) %>% 
+      summarise(proportion = mean(vazio)) %>% 
+      pull(proportion)   
+    return(d[1]-d[2])
+}
+
+bootstraps_3_0301 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0301,  
+                   R = 200) 
+
+bootstraps_3_0302 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0302, 
+                   R = 200) 
+
+bootstraps_3_0303 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0303,
+                   R = 200) 
+
+bootstraps_3_0304 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0304,
+                   R = 200)
+
+bootstraps_3_0305 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0305, 
+                   R = 200) 
+
+bootstraps_3_0306 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0306, 
+                   R = 200) 
+
+bootstraps_3_0307 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0307, 
+                   R = 200) 
+
+bootstraps_3_0308 <- boot(data = buscas_3, 
+                   statistic = funcao_bootstrap_3_0308,
+                   R = 200) 
+
+
+ci_3_0301 <- boot.ci(bootstraps_3_0301, conf = 0.95, type = "basic")
+
+ci_3_0302 <- boot.ci(bootstraps_3_0302, conf = 0.95, type = "basic")
+
+ci_3_0303 <- boot.ci(bootstraps_3_0303, conf = 0.95, type = "basic")
+
+ci_3_0304 <- boot.ci(bootstraps_3_0304, conf = 0.95, type = "basic")
+
+ci_3_0305 <- boot.ci(bootstraps_3_0305, conf = 0.95, type = "basic")
+
+ci_3_0306 <- boot.ci(bootstraps_3_0306, conf = 0.95, type = "basic")
+
+ci_3_0307 <- boot.ci(bootstraps_3_0307, conf = 0.95, type = "basic")
+
+ci_3_0308 <- boot.ci(bootstraps_3_0308, conf = 0.95, type = "basic")
+
+```
+```{r }
+
+ci_3_0301_ <- tibble(estatistica = as.double(ci_3_0301$t0),basic_1 = as.double(ci_3_0301$basic[4]), basic_2 = as.double(ci_3_0301$basic[5]), day = '03-01 Ter') 
+
+ci_3_0302_ <- tibble(estatistica = as.double(ci_3_0302$t0),basic_1 = as.double(ci_3_0302$basic[4]), basic_2 = as.double(ci_3_0302$basic[5]), day = '03-02 Qua') 
+
+ci_3_0303_ <- tibble(estatistica = as.double(ci_3_0303$t0),basic_1 = as.double(ci_3_0303$basic[4]), basic_2 = as.double(ci_3_0303$basic[5]), day = '03-03 Qui') 
+
+ci_3_0304_ <- tibble(estatistica = as.double(ci_3_0304$t0),basic_1 = as.double(ci_3_0304$basic[4]), basic_2 = as.double(ci_3_0304$basic[5]), day = '03-04 Sex') 
+
+ci_3_0305_ <- tibble(estatistica = as.double(ci_3_0305$t0),basic_1 = as.double(ci_3_0305$basic[4]), basic_2 = as.double(ci_3_0305$basic[5]), day = '03-05 Sáb') 
+
+ci_3_0306_ <- tibble(estatistica = as.double(ci_3_0306$t0),basic_1 = as.double(ci_3_0306$basic[4]), basic_2 = as.double(ci_3_0306$basic[5]), day = '03-06 Dom') 
+
+ci_3_0307_ <- tibble(estatistica = as.double(ci_3_0307$t0),basic_1 = as.double(ci_3_0307$basic[4]), basic_2 = as.double(ci_3_0307$basic[5]), day = '03-07 Seg') 
+
+ci_3_0308_ <- tibble(estatistica = as.double(ci_3_0308$t0),basic_1 = as.double(ci_3_0308$basic[4]), basic_2 = as.double(ci_3_0308$basic[5]), day = '03-08 Ter') 
+
+populacao_3 = bind_rows(ci_3_0301_, ci_3_0302_, ci_3_0303_, ci_3_0304_, ci_3_0305_, ci_3_0306_, ci_3_0307_, ci_3_0308_)
+
+```
+```{r }
+
+
+
+p1<-ggplot(populacao_3, aes(y=estatistica, x=day)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=basic_2, ymin=basic_1), width=0.2) + 
+    labs(x=NULL,  
+        y="diferrença", 
+        title="Diferença entre grupos da proporção diária de fracasso em buscas", 
+        subtitle="(day, diferença)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        panel.border=element_blank()) 
+
+p2<-ggplot(populacao_3_geral, aes(y=estatistica, x=day)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=basic_2, ymin=basic_1), width=0.2)  + 
+    labs(x=NULL,  
+        y="Fracasso", 
+        title="Proporção diária de fracasso em buscas", 
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        panel.border=element_blank()) 
+
+
+
+
+grid.arrange(arrangeGrob(p1,p2,ncol=1,widths=c(1)),
+    heights=c(1))
+
+```
+
+Com base no primeiro conjunto de intervalos ("Diferença entre grupos da proporção diária de fracasso"), podemos concluir, à 95% de confiança, que a diferença diária entre grupos é pouco ou nada significativa (intervalos incluem o zero).
+
+Já a respeito da proporção diário geral de buscas vazias, podemos concluir, à 95% de confiança, que está situada em [0.17, 0.20] a cada dia. Nossa amostra parece indicar que resultados ruins tendem a ocorrem mais em dias úteis que no fim de semana, sendo domingo o dia com estimativas mais baixas.
+
+
+### Q1.alternativa. Teste o que acontece se para **Q1**, em vez de comparar o grupo A com o grupo B (um teste A/B), você compara metade das sessões do grupo A (escolhida aleatoriamente) com outra metade das sessões do mesmo grupo (um teste A/A)..
+
+Relembrando **Q1**: "Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?". Agora os grupos em questão são A e A'.
+
+Sob estas circunstâncias, a única resposta correta que poderíamos concluir seria que não se pode concluir que há alguma diferença entre os dois grupos (selecionados aleatoriamente). Vejamos se isto se confirma.
+
+Refazendo o processo realizado em **Q1**, vamos estimar a distribuição amostral da média da variável `visited` por grupo (os grupos "A" e "A'"), além de observar a diferença pareada entre os grupos "A" e "A'" pela estimativa da diferença entre as médias para `visited`:
+
+```{r}
+
+sessionsA <- sessions %>% filter(group == "a",!is.na(visited))
+
+sessionsA_ = sample_n(sessionsA, 2104) %>% mutate(group_ = "A'")
+
+sessionsA = sample_n(sessionsA, 2104) %>% mutate(group_ = "A")
+
+populacao_AA_ = bind_rows(sessionsA_, sessionsA)
+
+```
+```{r}
+
+
+funcao_bootstrap_AA_a <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1])
+}
+
+funcao_bootstrap_AA_b <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[2])
+}
+
+funcao_bootstrap_AA_a_b <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+bootstraps_AA_a <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_a, 
+                   R = 200) 
+
+bootstraps_AA_b <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_b,
+                   R = 200) 
+
+bootstraps_AA_a_b <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_a_b,
+                   R = 200) 
+```
+```{r }
+
+p1 <- tibble(estatistica = as.double(bootstraps_AA_a$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue")  + 
+    labs(x="'clickthrough rate' para o grupo A",  
+        y=NULL, 
+        title="Distribuição de 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank())
+
+p2 <- tibble(estatistica = as.double(bootstraps_AA_b$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue")  + 
+    labs(x="'clickthrough rate' para o grupo A'",  
+        y=NULL, 
+        title="Distribuição de 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+p3 <- tibble(estatistica = as.double(bootstraps_AA_a_b$t)) %>% 
+  ggplot(aes(x = estatistica)) + 
+  geom_histogram(binwidth = .001, fill = "white", color="blue")  + 
+    labs(x="diferença entre A e A'",  
+        y=NULL, 
+        title="Distribuição de 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+
+
+grid.arrange(arrangeGrob(p3,ncol=1,widths=c(1)),
+    arrangeGrob(p2,p1,ncol=2,widths=c(2,2)),
+    heights=c(2,2))
+
+```
+
+Novamente, todas as distribuições seguem a regra normal. As distribuições A e A' parecem ligeiramente diferentes, mas, neste ponto da análise, isto não tem relevância. Agora faremos uma análise da diferença pareada desta entre grupos dia após dia.
+
+```{r}
+
+funcao_bootstrap_AA_0301 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0302 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0303 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0304 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-04') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0305 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0306 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0307 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+funcao_bootstrap_AA_0308 <- function(dado, indices){
+    d = dado %>% 
+      slice(indices) %>% 
+      filter(format(day, "%m-%d") == '03-01') %>%
+      group_by(group_) %>% 
+      summarise(click_through = mean(visited)) %>% 
+      pull(click_through)   
+    return(d[1] - d[2])
+}
+
+bootstraps_AA_0301 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0301, 
+                   R = 200) 
+
+bootstraps_AA_0302 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0302, 
+                   R = 200)
+
+bootstraps_AA_0303 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0303, 
+                   R = 200)
+
+bootstraps_AA_0304 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0304,
+                   R = 200) 
+
+bootstraps_AA_0305 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0305,
+                   R = 200) 
+
+bootstraps_AA_0306 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0306, 
+                   R = 200) 
+
+bootstraps_AA_0307 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0307, 
+                   R = 200) 
+
+bootstraps_AA_0308 <- boot(data = populacao_AA_, 
+                   statistic = funcao_bootstrap_AA_0308,
+                   R = 200)
+
+
+ci_AA_0301 <- boot.ci(bootstraps_AA_0301, conf = 0.95, type = "basic")
+
+ci_AA_0302 <- boot.ci(bootstraps_AA_0302, conf = 0.95, type = "basic")
+
+ci_AA_0303 <- boot.ci(bootstraps_AA_0303, conf = 0.95, type = "basic")
+
+ci_AA_0304 <- boot.ci(bootstraps_AA_0304, conf = 0.95, type = "basic")
+
+ci_AA_0305 <- boot.ci(bootstraps_AA_0305, conf = 0.95, type = "basic")
+
+ci_AA_0306 <- boot.ci(bootstraps_AA_0306, conf = 0.95, type = "basic")
+
+ci_AA_0307 <- boot.ci(bootstraps_AA_0307, conf = 0.95, type = "basic")
+
+ci_AA_0308 <- boot.ci(bootstraps_AA_0308, conf = 0.95, type = "basic")
+
+```
+```{r }
+
+
+ci_AA_0301_ <- tibble(estatistica = as.double(ci_AA_0301$t0),basic_1 = as.double(ci_AA_0301$basic[4]), basic_2 = as.double(ci_AA_0301$basic[5]), day = '03-01 Ter') 
+
+ci_AA_0302_ <- tibble(estatistica = as.double(ci_AA_0302$t0),basic_1 = as.double(ci_AA_0302$basic[4]), basic_2 = as.double(ci_AA_0302$basic[5]), day = '03-02 Qua') 
+
+ci_AA_0303_ <- tibble(estatistica = as.double(ci_AA_0303$t0),basic_1 = as.double(ci_AA_0303$basic[4]), basic_2 = as.double(ci_AA_0303$basic[5]),  day = '03-03 Qui') 
+
+ci_AA_0304_ <- tibble(estatistica = as.double(ci_AA_0304$t0),basic_1 = as.double(ci_AA_0304$basic[4]), basic_2 = as.double(ci_AA_0304$basic[5]), day = '03-04 Sex') 
+
+ci_AA_0305_ <- tibble(estatistica = as.double(ci_AA_0305$t0),basic_1 = as.double(ci_AA_0305$basic[4]), basic_2 = as.double(ci_AA_0305$basic[5]), day = '03-05 Sáb') 
+
+ci_AA_0306_ <- tibble(estatistica = as.double(ci_AA_0306$t0),basic_1 = as.double(ci_AA_0306$basic[4]), basic_2 = as.double(ci_AA_0306$basic[5]), day = '03-06 Dom') 
+
+ci_AA_0307_ <- tibble(estatistica = as.double(ci_AA_0307$t0),basic_1 = as.double(ci_AA_0307$basic[4]), basic_2 = as.double(ci_AA_0307$basic[5]), day = '03-07 Seg') 
+
+ci_AA_0308_ <- tibble(estatistica = as.double(ci_AA_0308$t0),basic_1 = as.double(ci_AA_0308$basic[4]), basic_2 = as.double(ci_AA_0308$basic[5]), day = '03-08 Ter') 
+
+populacao_AA = bind_rows(ci_AA_0301_, ci_AA_0302_, ci_AA_0303_, ci_AA_0304_, ci_AA_0305_, ci_AA_0306_, ci_AA_0307_, ci_AA_0308_)
+
+
+ggplot(populacao_AA, aes(y=estatistica, x=day)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=basic_2, ymin=basic_1), width=0.2) + 
+    labs(x=NULL,  
+        y="'clickthrough rate'", 
+        title="Diferença de 'clickthrough rate' entre A e A'", 
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        panel.border=element_blank()) 
+
+
+
+```
+
+Observe que todos os intervalos incluem o zero e não há nenhuma diferença significativa. Com isto, à 95% de confiança, podemos concluir que não existe diferença entre A e A' quanto à `clickthrough rate`.
+
+
+# Sumário
+
+A partir das quatro questões propostas levantamos hipóteses interessantes a respeito da natureza dos dados, chegamos a algumas conclusões úteis e pudemos entender melhor como estes estão correlacionados. Com base em **Q1** e o cálculo das sessões de buscas com acesso a resultados (cliques) pudemos ver uma grande diferença significativa nas proporções entre os grupos "a" e "b", o que sugere uma diferença funcional entre estas duas categorias. Notamos também uma sutil melhora na taxa de cliques no meio da semana em relação ao fim de semana.
+
+Em **Q2**, percebemos que as pessoas tendem a dar preferência às primeiras opções dos resultados de busca, como era de se esperar. Além disto, concluímos que quando um usuário não clica na primeira opção, tende a clicar, à 95% de confiança, em média entre [3.3, 3.7]. Já em **Q3**, estimamos, à 95% de confiança, que a diferença entre os grupos "a" e "b" para a proporção de buscas sem resultados não é significativa. Além de estimarmos, à 95% de confiança, que a média de buscas vazias diárias está sempre dentro do intervalo [0.17, 0.20], com uma leve tendência a ocorrerem em dias úteis com mais frequência.
+
+Por fim, em **Q1.alternativa**, a título de teste, refizemos a análise de **Q1** entre grupos. Desta vez criamos dois grupos escolhidos randomicamente (A e A'). Como esperado, à 95% de confiança, não houve diferença significativa entre os grupos.
