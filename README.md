@@ -16,7 +16,7 @@ Seguindo o [exercício original de análise](https://github.com/wikimedia-resear
 
 ## Relatório
 
-O relatório referente à tarefa 2.4 foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada [aqui](http://rpubs.com/tiago_clementino/384699). Já aquele referente à tarefa 3.1 ( [aqui]() ), trata do mesmo problema, ou seja, responder às questões de análise, porém deixando a quarta questão de lado.
+O relatório referente à tarefa 2.4 foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada [aqui](http://rpubs.com/tiago_clementino/384699). Já aquele referente à tarefa 3.1 ( [aqui](http://rpubs.com/tiago_clementino/390167) ), trata do mesmo problema, ou seja, responder às questões de análise, porém deixando a quarta questão de lado.
 
 Para o relatório 3.1, além das questões descritas na tarefa original, é incluido uma outra que seria semelhante à primeira (**Q1**). Nesta questão, ao invés de fazer a análise em função dos grupos 'a' e 'b', tal como na **Q1** original, criamos dois novos grupos e analisamos em função deles. Tais grupos seriam partições randômicas do grupo 'a'.
 
