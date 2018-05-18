@@ -1,4 +1,4 @@
-# FPCC1 - Laboratório 2 - Checkpoint 4
+# FPCC2: Lab 2 - Check 4 e Lab 3 - Check 1
 
 ## Sessões, Buscas e Navegação [Wikimedia Foundation]
 
@@ -16,7 +16,9 @@ Seguindo o [exercício original de análise](https://github.com/wikimedia-resear
 
 ## Relatório
 
-O relatório referente à tarefa 2.4 foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada [aqui](http://rpubs.com/tiago_clementino/384699). Já aquele referente à tarefa 3.1, [aqui](), trata do mesmo problema, ou seja, responder às três questões de análise, deixando a quarta questão de lado e incluindo uma outra que seria semelhante à primeira. Nesta questão, ao invés de fazer a análise em função dos grupos 'a' e 'b', tal como na **Q1** original, criamos dois novos grupos e analisamos em função deles. Tais grupos seriam partições randômicas do grupo 'a'.
+O relatório referente à tarefa 2.4 foi desenvolvido com o intuito de corresponder aos objetivos expostos na tarefa original. Sua versão final está publicada [aqui](http://rpubs.com/tiago_clementino/384699). Já aquele referente à tarefa 3.1 ( [aqui]() ), trata do mesmo problema, ou seja, responder às questões de análise, porém deixando a quarta questão de lado.
+
+Para o relatório 3.1, além das questões descritas na tarefa original, é incluido uma outra que seria semelhante à primeira (**Q1**). Nesta questão, ao invés de fazer a análise em função dos grupos 'a' e 'b', tal como na **Q1** original, criamos dois novos grupos e analisamos em função deles. Tais grupos seriam partições randômicas do grupo 'a'.
 
 ## Os dados
 
@@ -47,12 +49,12 @@ Na IDE do RStudio, instale os seguintes pacotes:
 4. Abra o projeto ".\exercicio-wikimedia.Rproj".
 3. Abra o arquivo ".\dados\import-events_to_searches.R". Em seguida clique em "Run" (canto superior direito do editor). Isto pode levar algum tempo (é necessário ter conexão com a Internet).
 
-# Para a tarefa 2.4
+### Para a tarefa 2.4
 
 4. Abra o arquivo ".\reports\lab-2-checkpoint-4.2.Rmd". Clique em "Knit" (canto superior esquerdo do editor). Dentre as opções apresentadas, selecione "knit to html_pretty".
 5. O resultado será exibido e estará disponível em ".\reports\lab-2-checkpoint-4.2.html".
 
-# Para a tarefa 3.1
+### Para a tarefa 3.1
 
 4. Abra o arquivo ".\reports\lab-3-checkpoint-1.2.Rmd". Clique em "Knit" (canto superior esquerdo do editor). Dentre as opções apresentadas, selecione "knit to html_pretty".
 5. O resultado será exibido e estará disponível em ".\reports\lab-3-checkpoint-1.2.html".
