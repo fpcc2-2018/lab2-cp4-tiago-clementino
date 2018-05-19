@@ -1,6 +1,6 @@
 ---
 title: "FPCC02"
-subtitle: "Inferência via ICs"
+subtitle: "Inferência via IC"
 author:
 - name: "Tiago Clementino"
 date: "`r format(Sys.Date(), '%d de %B de %Y')`"
@@ -177,19 +177,19 @@ funcao_bootstrap_1_a_b <- function(dado, indices){
 
 bootstraps_1_geral <- boot(data = sessions, 
                    statistic = funcao_bootstrap_1_geral,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_1_a <- boot(data = sessions, 
                    statistic = funcao_bootstrap_1_a,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_1_b <- boot(data = sessions, 
                    statistic = funcao_bootstrap_1_b, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_1_a_b <- boot(data = sessions, 
                    statistic = funcao_bootstrap_1_a_b, 
-                   R = 200) 
+                   R = 500) 
 
 ```
 
@@ -339,35 +339,35 @@ funcao_bootstrap_geral_0308 <- function(dado, indices){
 
 bootstraps_geral_0301 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0301, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_geral_0302 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0302, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_geral_0303 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0303,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_geral_0304 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0304,  
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_geral_0305 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0305, 
-                   R = 200)
+                   R = 500)
 
 bootstraps_geral_0306 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0306,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_geral_0307 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0307, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_geral_0308 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_geral_0308, 
-                   R = 200) 
+                   R = 500) 
 
 ci_geral_0301 <- boot.ci(bootstraps_geral_0301, conf = 0.95, type = "basic")
 
@@ -474,35 +474,35 @@ funcao_bootstrap_0308 <- function(dado, indices){
 
 bootstraps0301 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0301,
-                   R = 200)
+                   R = 500)
 
 bootstraps0302 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0302, 
-                   R = 200)
+                   R = 500)
 
 bootstraps0303 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0303, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps0304 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0304, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps0305 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0305,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps0306 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0306,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps0307 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0307,  
-                   R = 200)
+                   R = 500)
 
 bootstraps0308 <- boot(data = sessions, 
                    statistic = funcao_bootstrap_0308,
-                   R = 200)
+                   R = 500)
 
 ci0301 <- boot.ci(bootstraps0301, conf = 0.95, type = "basic")
 
@@ -661,7 +661,7 @@ funcao_bootstrap_mean <- function(dado, indices){
 
 bootstraps_mean <- boot(data = buscas, 
                    statistic = funcao_bootstrap_mean, 
-                   R = 200) 
+                   R = 500) 
 
 
 
@@ -684,6 +684,8 @@ tibble(estatistica = as.double(bootstraps_mean$t)) %>%
 
 
 ```
+
+Note que aqui também podemos perceber uma distribuição normal com poucas anomalias.
 
 ```{r}
 
@@ -763,35 +765,35 @@ funcao_bootstrap_2_0308 <- function(dado, indices){
 
 bootstraps_2_0301 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0301,  
-                   R = 200)
+                   R = 500)
 
 bootstraps_2_0302 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0302, 
-                   R = 200)
+                   R = 500)
 
 bootstraps_2_0303 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0303, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_2_0304 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0304, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_2_0305 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0305,
-                   R = 200)
+                   R = 500)
 
 bootstraps_2_0306 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0306, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_2_0307 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0307,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_2_0308 <- boot(data = buscas_2, 
                    statistic = funcao_bootstrap_2_0308,
-                   R = 200) 
+                   R = 500) 
 
 
 ci_2_0301 <- boot.ci(bootstraps_2_0301, conf = 0.95, type = "basic")
@@ -904,19 +906,19 @@ funcao_bootstrap_3_a_b <- function(dado, indices){
 
 bootstraps_3_geral <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_a <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_a, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_b <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_b,  
-                   R = 200)
+                   R = 500)
 
 bootstraps_3_a_b <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_a_b,  
-                   R = 200) 
+                   R = 500) 
 
 ```
 ```{r }
@@ -1064,35 +1066,35 @@ funcao_bootstrap_3_geral_0308 <- function(dado, indices){
 
 bootstraps_3_geral_0301 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0301, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0302 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0302, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0303 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0303,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0304 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0304, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0305 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0305, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0306 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0306,  
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0307 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0307,  
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_geral_0308 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_geral_0308,  
-                   R = 200) 
+                   R = 500) 
 
 
 ci_3_geral_0301 <- boot.ci(bootstraps_3_geral_0301, conf = 0.95, type = "basic")
@@ -1218,35 +1220,35 @@ funcao_bootstrap_3_0308 <- function(dado, indices){
 
 bootstraps_3_0301 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0301,  
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_0302 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0302, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_0303 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0303,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_0304 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0304,
-                   R = 200)
+                   R = 500)
 
 bootstraps_3_0305 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0305, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_0306 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0306, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_0307 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0307, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_3_0308 <- boot(data = buscas_3, 
                    statistic = funcao_bootstrap_3_0308,
-                   R = 200) 
+                   R = 500) 
 
 
 ci_3_0301 <- boot.ci(bootstraps_3_0301, conf = 0.95, type = "basic")
@@ -1387,15 +1389,15 @@ funcao_bootstrap_AA_a_b <- function(dado, indices){
 
 bootstraps_AA_a <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_a, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_b <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_b,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_a_b <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_a_b,
-                   R = 200) 
+                   R = 500) 
 ```
 ```{r }
 
@@ -1535,35 +1537,35 @@ funcao_bootstrap_AA_0308 <- function(dado, indices){
 
 bootstraps_AA_0301 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0301, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_0302 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0302, 
-                   R = 200)
+                   R = 500)
 
 bootstraps_AA_0303 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0303, 
-                   R = 200)
+                   R = 500)
 
 bootstraps_AA_0304 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0304,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_0305 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0305,
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_0306 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0306, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_0307 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0307, 
-                   R = 200) 
+                   R = 500) 
 
 bootstraps_AA_0308 <- boot(data = populacao_AA_, 
                    statistic = funcao_bootstrap_AA_0308,
-                   R = 200)
+                   R = 500)
 
 
 ci_AA_0301 <- boot.ci(bootstraps_AA_0301, conf = 0.95, type = "basic")
