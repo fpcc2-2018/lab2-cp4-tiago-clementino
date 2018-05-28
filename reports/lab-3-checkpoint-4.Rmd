@@ -1,0 +1,453 @@
+---
+title: "FPCC02"
+subtitle: "Teste de Hipóteses"
+author:
+- name: "Tiago Clementino"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  prettydoc::html_pretty:
+    toc: true
+    theme: leonids
+    highlight: vignette
+    fig_width: 6 
+    fig_height: 4.5 
+    keep_tex: yes
+vignette: >
+  %\VignetteIndexEntry{Creating Pretty Documents from R Markdown - The Leonids Theme}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
+library(tidyverse)
+library(here)
+library(lubridate)
+library(boot)
+library(shiny)
+library(resample)
+library(gridExtra)
+```
+
+```{r read, include=FALSE}
+buscas = read_csv(here::here("data/search_data.csv"))
+```
+# Objetivo
+
+Vamos reproduzir um problema de exploração de dados que a Fundação Wikimedia usou em 2016 no recrutamento de pessoas para trabalhar em seu departamento de descoberta. O objetivo é seguir as instruções colocadas na tarefa original. Aqui devemos revisitar duas das questões respondidas no *checkpoint* 1 deste laboratório.
+
+O objetivo é explorar as possibilidades da inferência estatística por teste de hipóteses. A entrega consiste de um relatório explorando por este método estatístico duas das perguntas do último relatório. Escolhemos a pergunta 1 (**Q1**) e a variação da pergunta um com uma população artificial gerada randomicamente a partir do grupo "a". 
+
+
+### Contexto
+
+O departamento de descoberta da Fundação Wikimedia utiliza um registro de eventos (Event Logging, EL) para avaliar várias métricas de performance e usabilidade, ajudando-os a tomar decisões. Sobretudo, tal iniciativa está interessada em:
+
+
+* *clickthrough rate*: a proporção de sessões de busca onde o usuário clica em um dos resultados apresentados.
+
+* *zero results rate*: a proporção de buscas que não tiveram resultados.
+
+
+e outras métricas fora do escopo desta tarefa. EL usa Javascript para enviar mensagens aos servidores da Wikimedia de forma assíncrona quando o usuário realiza ações específicas. Nesta tarefa irei analisar uma amostra deste registro de eventos na intenção de tirar conclusões a respeito de todo o registro de eventos.
+
+
+### Dados
+
+O conjunto de dados vem de uma estratégia de EL usada para avaliar a satisfação do usuário. Usuários *standalone* são randomicamente coletados para ser anonimamente rastreados por tal estratégia, que usa um sistema de descoberta do tipo *I'm alive* para estimar quanto tempo os usuários permanecem nas páginas que eles visitam. O conjunto de dados contém em tabela pouco mais de uma semana de EL com as seguintes colunas.
+
+| Campo              | Tipo    | Descrição                                                                         |
+|--------------------|---------|-----------------------------------------------------------------------------------|
+| `uuid`             | string  | Identificador universal único (UUID) para gerenciamento dos registros.            |
+| `timestamp`        | integer | Data e hora (UTC) do evento com a seguinte formatação: YYYYMMDDhhmmss.            |
+| `session_id`       | string  | Um identificador individual de sessão único.                                      |
+| `group`            | string  | Uma marca ("a" ou "b").                                                           |
+| `action`           | string  | Identifica a natureza do evento em que foi criado. Veja abaixo.                   |
+| `checkin`          | integer | Quantos segundos a página passou aberta.                                          |
+| `page_id`          | string  | Um identificador único relacionado às páginas visitadas e verificadas.            |
+| `n_results`        | integer | Número de sugestões de páginas retornado. Apenas para eventos searchResultPage.   |
+| `result_position`  | integer | A posição do link na SERP (Search Engine Results Page) para a página visitada.    |
+
+
+O campo `action` pode ter os seguintes valores:
+
+
+* `searchResultPage`: quando uma nova busca é realizada e uma SERP é apresentado ao usuário.
+
+* `visitPage`: quando o usuário clica em um *link* dos resultados.
+
+* `checkin`: quando o usuário permaneceu em uma página por um intervalo de tempo pré-definido.
+
+
+### Descrição do objetivo
+
+O objetivo aqui é criar um relatório reproduzível respondendo por teste de hipóteses, de acordo com os dados, as seguintes perguntas:
+
+
+ - **Q1**. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
+ 
+ - **Q1.alternativa**. Responda **Q1** novamente, porém utilize apenas o grupo A, o dividindo randomicamente em dois grupos A e A'.
+
+
+*As questão **Q2**,**Q3** e **Q4** descrita na tarefa da Wikimedia foge ao escopo deste relatório.
+
+
+### Dados tratados
+
+Para Facilitar nosso esforço em resolver as duas questões, tratei os dados utilizando o script "import-events_to_searches.R" (editado a partir da versão inicial presente no repositório original do *lab 02 checkpoint 04*). As informações que antes eram referentes a eventos pontuais, agora foram agrupadas em buscas (com possivelmente mais de um evento). Os novos dados, agora simplificados e mais fáceis de tratar, estão dispostos em uma tabela com as seguintes colunas:
+
+
+| Campo                      | Tipo    | Descrição                                                             |
+|----------------------------|---------|-----------------------------------------------------------------------|
+| `search_index`             | integer | Um contator que marca cada uma das buscas em uma sessão               |
+| `session_start_timestamp`  | integer | Data e hora de início da sessão correspondente                        |
+| `day`                      | date    | Data da sessão correspondente                                         |
+| `session_legth`            | integer | Duração da sessão contada em segundos                                 |
+| `last_search`              | integer | Última busca realizada na sessão (último `search_index`)              |
+| `group`                    | string  | Uma marca de grupo ("a" e "b")                                        |
+| `results`                  | integer | Número de resultados da busca                                         |
+| `num_clicks`               | integer | Número de páginas acessadas na busca                                  |
+| `first_click`              | integer | Posição do primeiro click                                             |
+
+
+# Questões
+
+
+### Q1. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
+
+Antes de começarmos devemos estabelecer o que é a taxa de clicks geral diária. Em meu entendimento, cada sessão tem uma finalidade específica e qualquer busca será realização em função deste fim. Buscas de fato vazias são aquelas em que o usuário não encontrou o que procura em toda a sua sessão. Diante deste entendimento, tome a *clickthrough rate* como a taxa de cliques por sessão. Como a taxa é por sessão, agrupar os dados desta forma é um bom primeiro passo. Enquanto ocorre este agrupamento criei uma nova variável que ajuda na tarefa de analisar a taxa de cliques: `visited` para identificar facilmente qual sessão teve ou não cliques (1 ou 0). `results` e `num_clicks` somam as variáveis originais de mesmo nome, agrupando por sessão.
+
+```{r message=FALSE, warning=FALSE}
+sessions = buscas %>% #agrupando por sessão
+    group_by(group, day, session_id) %>% 
+    summarise(visited = ifelse(sum(num_clicks) > 0, 1.0, 0.0),
+              session_legth = first(session_legth),
+              last_search = first(last_search),
+              results = sum(results, na.rm = TRUE),
+              num_clicks = sum(num_clicks, na.rm = TRUE), 
+              first_search_zero = ifelse(first(results)==0, "Sim", "Não"))
+```
+
+Partindo para o problema em si, espero ser possível estimar a relação da *clickthrough rate* diária entre os grupos "a" e "b". Para tanto, em alternativa ao que foi feito no [relatório anterior](http://rpubs.com/tiago_clementino/390167), que fez uso de IC com bootstrap, utilizarei testes de hipóteses com permutação. 
+
+A seguir vou relembrar a distribuição da variável em questão (*clickthrough rate*) diariamente e em função dos grupos. Veja o gráfico.
+
+
+```{r message=FALSE, warning=FALSE}
+sessions %>% 
+    group_by(group, day) %>% 
+    arrange(day) %>%
+    summarise(proportion = mean(visited)) %>% 
+        ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
+        geom_col(position = "dodge") + 
+    labs(x='Dias da semana',  
+        y="'clickthrough rate'", 
+        title="Proporção Diária de 'clickthrough rate'", 
+        color='Grupos',
+        fill='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="top",
+        panel.border=element_blank())
+```
+
+Perceba que há duas regiões de valores claramente distintas, tendo o grupo "a" uma taxa nitidamente mais elevada que o grupo "b", e isto irá refletir nos próximos passos.
+
+Utilizaremos a partir de agora uma metodologia de teste de hipóteses com permutação em duas caldas sobre nossa amostra. O objetivo é realizar uma análise pareada, tendo como estatística a média de cliques diária e "a" e "b", os grupos de comparação. Antes de tudo devemos estabelecer nossas hipóteses e o que significam especificamente:
+
+ - **H0**: Sendo esta a hipótese nula, significa que não há correlação entre os grupos. Caso seja aceita, qualquer resultado apresentado será uma consequência da natureza geral dos dados. Para tanto, a distribuição da diferença entre as médias de cliques de cada grupo deve incluir o zero.
+ - **H1**: Sendo a hipótese alternativa. Caso seja verificada, significa que há correlação entre os grupos. A verificação desta hipótese é feita através da distância em relação à **H0**.
+
+Perceba no gráfico abaixo que a distribuição das permutações, ainda que gaussiana, assume um formato peculiar, com ilhas distintas de valores. Isto se dá, como foi previsto, em função de um particionamento muito claro entre os valores de "a" e "b" dia a dia (gráfico anterior). Além disto, percebe a linha vermelha marcando o p-value à direita de nosso gráfico, longe dos valores estimados na permutação. Isto já sugere uma diferença significativa entre a **H1** e **H0**.
+
+```{r message=FALSE, warning=FALSE}
+
+populacao_1 <- sessions %>% 
+    group_by(day, group) %>% 
+    summarise(ctr = sum(visited)/n()) %>%
+    permutationTest2(mean(ctr), treatment = group, R=999)
+
+tibble(observed = as.double(populacao_1$observed), statistic = as.double(populacao_1$replicates)) %>% 
+  ggplot(aes(x = statistic)) + 
+  geom_histogram(binwidth = .003, fill = "white", color="blue") + 
+    geom_vline(xintercept=populacao_1$observed, color="red")+
+    labs(x="'clickthrough rate'",  
+        y=NULL, 
+        title="Distribuição da 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+```
+
+Vejamos nos dados abaixo que, como percebemos no gráfico acima, podemos concluir que há uma correlação da taxa de cliques entre os dois grupos. Vejamos: Perceba que **Observed**, sendo a média da taxa de cliques diária na nossa amostra, está longe de **Mean**, o ponto central da distribuição gerada pelas permutações (**H0**), rejeitando a hipótese nula. Veja também que **Mean** é um valor bem próximo de zero, e não poderia ser diferente, pois **H0** prevê ausência da correlação entre as taxas de "a" e "b".
+
+Sendo assim, com base nestes valores, com um p-valor menor que 0.005, podemos afirmar, com mais de 95% de certeza, que há uma correlação significativa entre estes valores na população (refletida na amostra).
+
+Relembrando o [relatório](http://rpubs.com/tiago_clementino/390167) anterior, podemos comparar IC(Intervalos de Confiança) e TH (Testes de Hipóteses). Entenda que TH não traz nenhuma informação numérica acerca dos dados da população, apenas responde uma pergunta sobre ela. Já IC, além de cumprir a mesma função de responder à uma pergunta sobre a população, ainda apresenta informação numérica sobre esta, deixando o pesquisador à vontade para decidir se aqueles valores o permitem concluir alguma coisa.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+populacao_1
+```
+
+Para finalizar, perceba no gráfico de dispersão abaixo a distância entre os valores de `clickthrough rate` na amostra para cada dia e das permutações realizadas durante o teste de hipótese também em cada dia separadamente. Veja que há uma distância nítida entre os pontos como verificamos no teste.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+perm_03_01 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-01') %>%
+    permutationTest2(mean(visited), treatment = group, R=999)
+
+perm_03_02 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-02') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+perm_03_03 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-03') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+perm_03_04 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-04') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+perm_03_05 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-05') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+perm_03_06 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-06') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+perm_03_07 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-07') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+perm_03_08 <- sessions %>% 
+    filter(format(day, "%m-%d") == '03-08') %>%
+    permutationTest2(mean(visited), treatment = group, R= 999)
+
+
+real_0301_ <- tibble(estatistica = as.double(perm_03_01$observed), day = '03-01 Ter', observed = 'Sim')
+perm_0301_ <- tibble(estatistica = as.double(perm_03_01$replicates), day = '03-01 Ter', observed = 'Não')
+
+real_0302_ <- tibble(estatistica = as.double(perm_03_02$observed), day = '03-02 Qua', observed = 'Sim')
+perm_0302_ <- tibble(estatistica = as.double(perm_03_02$replicates), day = '03-02 Qua', observed = 'Não')
+
+real_0303_ <- tibble(estatistica = as.double(perm_03_03$observed), day = '03-03 Qui', observed = 'Sim')
+perm_0303_ <- tibble(estatistica = as.double(perm_03_03$replicates), day = '03-03 Qui', observed = 'Não')
+
+real_0304_ <- tibble(estatistica = as.double(perm_03_04$observed), day = '03-04 Sex', observed = 'Sim')
+perm_0304_ <- tibble(estatistica = as.double(perm_03_04$replicates), day = '03-04 Sex', observed = 'Não')
+
+real_0305_ <- tibble(estatistica = as.double(perm_03_05$observed), day = '03-05 Sab', observed = 'Sim')
+perm_0305_ <- tibble(estatistica = as.double(perm_03_05$replicates), day = '03-05 Sab', observed = 'Não')
+
+real_0306_ <- tibble(estatistica = as.double(perm_03_06$observed), day = '03-06 Dom', observed = 'Sim')
+perm_0306_ <- tibble(estatistica = as.double(perm_03_06$replicates), day = '03-06 Dom', observed = 'Não')
+
+real_0307_ <- tibble(estatistica = as.double(perm_03_07$observed), day = '03-07 Seg', observed = 'Sim')
+perm_0307_ <- tibble(estatistica = as.double(perm_03_07$replicates), day = '03-07 Seg', observed = 'Não')
+
+real_0308_ <- tibble(estatistica = as.double(perm_03_08$observed), day = '03-08 Ter', observed = 'Sim')
+perm_0308_ <- tibble(estatistica = as.double(perm_03_08$replicates), day = '03-08 Ter', observed = 'Não')
+
+populacao_1 = bind_rows(real_0301_, perm_0301_, real_0302_, perm_0302_, real_0303_, perm_0303_, real_0304_, perm_0304_, real_0305_, perm_0305_, real_0306_, perm_0306_, real_0307_, perm_0307_, real_0308_, perm_0308_)
+
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+populacao_1 %>% 
+    group_by(day) %>% 
+    arrange(day) %>%
+    ggplot(aes(x = day, y = estatistica, color = observed, size = observed)) + 
+    geom_jitter(height = .0, width = .2, alpha = 0.5) + 
+    labs(x='Dias da semana',  
+        y="Permutações", 
+        title="Distribuição Diária de Permutações para 'clickthrough rate'", 
+        color='Grupos',
+        fill='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+```
+
+
+### Q1.alternativa. Teste o que acontece se para Q1, em vez de comparar o grupo A com o grupo B (um teste A/B), você compara metade das sessões do grupo A (escolhida aleatoriamente) com outra metade das sessões do mesmo grupo (um teste A/A).
+
+Relembrando **Q1**: "Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?". Agora os grupos em questão são A e A', gerados aleatoriamente a partir do grupo "a".
+
+Sob estas circunstâncias, tal como pudemos ver no [relatório anterior](http://rpubs.com/tiago_clementino/390167) a única resposta correta que poderíamos concluir seria que não se pode concluir que há alguma diferença entre estes dois grupos (selecionados aleatoriamente). Vejamos se isto se confirma.
+
+Refazendo o processo realizado em **Q1**, devemos estabelecer nossas hipóteses e o que significam especificamente:
+
+ - **H0**: Sendo esta a hipótese nula, significa que não há correlação entre os grupos. Caso esteja aceita, qualquer resultado apresentado será uma consequência da natureza geral dos dados. Sendo assim, a distribuição da diferença entre as médias de cliques deve incluir o zero.
+ - **H1**: Sendo a hipótese alternativa. Caso seja aceita, então há correlação entre os grupos. A verificação desta hipótese é feita através da distância em relação à **H0**.
+ 
+Novamente, perceba no gráfico abaixo que a distribuição das permutações agora segue o padrão de uma distribuição gaussiana comum. Isto se dá, como foi previsto, em função da homogeneidade entre os grupos, o que não nos permite inferir nada neste momento. Já a linha vermelha marcando o p-valor no centro de nosso gráfico sugere não haver diferença significativa entre a **H1** e **H0**.
+
+```{r message=FALSE, warning=FALSE}
+
+sessionsA <- sessions %>% filter(group == "a",!is.na(visited))
+
+sessionsA_ = sample_n(sessionsA, 2104) %>% mutate(group_ = "A'")
+
+sessionsA = sample_n(sessionsA, 2104) %>% mutate(group_ = "A")
+
+populacao_AA_ = bind_rows(sessionsA_, sessionsA)
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+populacao_AA <- populacao_AA_ %>% 
+    group_by(day, group_) %>% 
+    summarise(ctr = sum(visited)/n()) %>%
+    permutationTest2(mean(ctr), treatment = group_, R=999)
+
+tibble(observed = as.double(populacao_AA$observed), statistic = as.double(populacao_AA$replicates)) %>% 
+  ggplot(aes(x = statistic)) + 
+  geom_histogram(binwidth = .0005, fill = "white", color="blue") + 
+    geom_vline(xintercept=populacao_AA$observed, color="red")+
+    labs(x="'clickthrough rate'",  
+        y=NULL, 
+        title="Distribuição da 'clickthrough rate'", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.caption = element_text(size="9"),
+        axis.title.x = element_text(size="10"),
+        axis.text.x = element_text(size="9"),
+        axis.text.y = element_text(size="10"),
+        panel.border=element_blank()) 
+
+
+```
+
+Vejamos nos dados abaixo que, como percebemos no gráfico acima, não há uma correlação da taxa de cliques entre os dois grupos. Novamente: Perceba que **Observed**, sendo a média da taxa de cliques diária na nossa amostra, é similar à **Mean** e ambas estão próximas a zero. Aceitando a hipótese nula e sugerindo a ausência da diferença entre as taxas de "A" e "A'".
+
+Sendo assim, com base nestes valores, tendo o p-valor maior que 0.9, posso considerar a hipótese nula aceita. Não há correlação significativa entre estes valores na população (que esteja refletida na amostra).
+
+Novamente, a partir de teste de hipóteses, não temos dados numéricos que materializem nossos resultados, apenas a resposta a uma pergunta com base em um único valor (o centro da distribuição), ao contrário da inferência estatística por IC.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+populacao_AA
+
+```
+
+Novamente, para finalizar, perceba no gráfico de dispersão abaixo a distância entre os valores de `clickthrough rate` na amostra para cada dia e das permutações realizadas durante o teste de hipótese também em cada dia separadamente. Não há distinção entre suas posições.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+perm_AA_03_01 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-01') %>%
+    permutationTest2(mean(visited), treatment = group_, R=999)
+
+perm_AA_03_02 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-02') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+perm_AA_03_03 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-03') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+perm_AA_03_04 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-04') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+perm_AA_03_05 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-05') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+perm_AA_03_06 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-06') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+perm_AA_03_07 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-07') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+perm_AA_03_08 <- populacao_AA_ %>% 
+    filter(format(day, "%m-%d") == '03-08') %>%
+    permutationTest2(mean(visited), treatment = group_, R= 999)
+
+
+real_AA_0301_ <- tibble(estatistica = as.double(perm_AA_03_01$observed), day = '03-01 Ter', observed = 'Sim')
+perm_AA_0301_ <- tibble(estatistica = as.double(perm_AA_03_01$replicates), day = '03-01 Ter', observed = 'Não')
+
+real_AA_0302_ <- tibble(estatistica = as.double(perm_AA_03_02$observed), day = '03-02 Qua', observed = 'Sim')
+perm_AA_0302_ <- tibble(estatistica = as.double(perm_AA_03_02$replicates), day = '03-02 Qua', observed = 'Não')
+
+real_AA_0303_ <- tibble(estatistica = as.double(perm_AA_03_03$observed), day = '03-03 Qui', observed = 'Sim')
+perm_AA_0303_ <- tibble(estatistica = as.double(perm_AA_03_03$replicates), day = '03-03 Qui', observed = 'Não')
+
+real_AA_0304_ <- tibble(estatistica = as.double(perm_AA_03_04$observed), day = '03-04 Sex', observed = 'Sim')
+perm_AA_0304_ <- tibble(estatistica = as.double(perm_AA_03_04$replicates), day = '03-04 Sex', observed = 'Não')
+
+real_AA_0305_ <- tibble(estatistica = as.double(perm_AA_03_05$observed), day = '03-05 Sab', observed = 'Sim')
+perm_AA_0305_ <- tibble(estatistica = as.double(perm_AA_03_05$replicates), day = '03-05 Sab', observed = 'Não')
+
+real_AA_0306_ <- tibble(estatistica = as.double(perm_AA_03_06$observed), day = '03-06 Dom', observed = 'Sim')
+perm_AA_0306_ <- tibble(estatistica = as.double(perm_AA_03_06$replicates), day = '03-06 Dom', observed = 'Não')
+
+real_AA_0307_ <- tibble(estatistica = as.double(perm_AA_03_07$observed), day = '03-07 Seg', observed = 'Sim')
+perm_AA_0307_ <- tibble(estatistica = as.double(perm_AA_03_07$replicates), day = '03-07 Seg', observed = 'Não')
+
+real_AA_0308_ <- tibble(estatistica = as.double(perm_AA_03_08$observed), day = '03-08 Ter', observed = 'Sim')
+perm_AA_0308_ <- tibble(estatistica = as.double(perm_AA_03_08$replicates), day = '03-08 Ter', observed = 'Não')
+
+populacao_AA = bind_rows(perm_AA_0301_, real_AA_0301_, perm_AA_0302_, real_AA_0302_, perm_AA_0303_, real_AA_0303_, perm_AA_0304_, real_AA_0304_, perm_AA_0305_, real_AA_0305_, perm_AA_0306_, real_AA_0306_, perm_AA_0307_, real_AA_0307_, perm_AA_0308_, real_AA_0308_)
+
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+populacao_AA %>% 
+    group_by(day) %>% 
+    arrange(day) %>%
+    ggplot(aes(x = day, y = estatistica, color = observed, size = observed)) + 
+    geom_jitter(height = .0, width = .2, alpha = 0.5) + 
+    labs(x='Dias da semana',  
+        y="Permutações", 
+        title="Distribuição Diária de Permutações para 'clickthrough rate'", 
+        color='Grupos',
+        fill='Grupos',
+        subtitle="(day, proportion)", 
+        caption="Wikimedia Foundation") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="nome",
+        panel.border=element_blank())
+
+```
+
+
+# Sumário
+
+
+A partir das duas questões propostas analisamos o comportamento da variável `clickthrough rate` diariamente, mas, principalmente, exploramos as possibilidades do método de inferência estatística por teste de hipóteses. Com base em **Q1** e o cálculo das sessões de buscas com acesso a resultados (cliques) pudemos inferir, com base na amostra, uma diferença significativa nas proporções entre os grupos "a" e "b", o que sugere uma diferença funcional entre estas duas categorias.
+
+Por fim, refazendo a **Q1** (alternativa), agora em uma análise não-pareado a partir de uma reamostragem aleatória da amostra original (criando os grupos A e A'), pudemos confirmar a eficácia do método de teste de hipóteses e aceitar a hipótese nula, como esperado (com p-valor de 0.9).
