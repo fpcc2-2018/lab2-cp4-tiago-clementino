@@ -131,7 +131,6 @@ Partindo para o problema em si, espero ser possível estimar a relação da *cli
 
 A seguir vou relembrar a distribuição da variável em questão (*clickthrough rate*) diariamente e em função dos grupos. Veja o gráfico.
 
-
 ```{r message=FALSE, warning=FALSE}
 sessions %>% 
     group_by(group, day) %>% 
@@ -158,12 +157,12 @@ sessions %>%
 
 Perceba que há duas regiões de valores claramente distintas, tendo o grupo "a" uma taxa nitidamente mais elevada que o grupo "b", e isto irá refletir nos próximos passos.
 
-Utilizaremos a partir de agora uma metodologia de teste de hipóteses com permutação em duas caldas sobre nossa amostra. O objetivo é realizar uma análise pareada, tendo como estatística a média de cliques diária e "a" e "b", os grupos de comparação. Antes de tudo devemos estabelecer nossas hipóteses e o que significam especificamente:
+Utilizaremos a partir de agora uma metodologia de teste de hipóteses com permutação em duas caldas sobre nossa amostra. O objetivo é realizar uma análise pareada, tendo como estatística a diferença entre as médias de cliques diárias de "a" e "b", os grupos de comparação. Antes de tudo, devemos estabelecer nossas hipóteses e o que significam especificamente:
 
- - **H0**: Sendo esta a hipótese nula, significa que não há correlação entre os grupos. Caso seja aceita, qualquer resultado apresentado será uma consequência da natureza geral dos dados. Para tanto, a distribuição da diferença entre as médias de cliques de cada grupo deve incluir o zero.
+ - **H0**: Sendo esta a hipótese nula, significa que não há correlação/diferença entre os grupos. Caso seja aceita, qualquer comportamento apresentado será consequência da natureza geral dos dados. Para tanto, a distribuição da diferença entre as médias de cliques de cada grupo deve incluir o zero.
  - **H1**: Sendo a hipótese alternativa. Caso seja verificada, significa que há correlação entre os grupos. A verificação desta hipótese é feita através da distância em relação à **H0**.
 
-Perceba no gráfico abaixo que a distribuição das permutações, ainda que gaussiana, assume um formato peculiar, com ilhas distintas de valores. Isto se dá, como foi previsto, em função de um particionamento muito claro entre os valores de "a" e "b" dia a dia (gráfico anterior). Além disto, percebe a linha vermelha marcando o p-value à direita de nosso gráfico, longe dos valores estimados na permutação. Isto já sugere uma diferença significativa entre a **H1** e **H0**.
+Perceba no gráfico abaixo que a distribuição das permutações, ainda que gaussiana, assume um formato peculiar, com ilhas distintas de valores. Isto se dá, como foi previsto, em função de um particionamento muito claro entre os valores de "a" e "b" dia a dia (gráfico anterior). Além disto, percebe a linha vermelha marcando o p-value à direita de nosso gráfico, longe dos valores estimados na permutação. Visualmente já podemos supor uma diferença significativa entre a **H1** e **H0**.
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -191,7 +190,7 @@ tibble(observed = as.double(populacao_1$observed), statistic = as.double(populac
 
 Vejamos nos dados abaixo que, como percebemos no gráfico acima, podemos concluir que há uma correlação da taxa de cliques entre os dois grupos. Vejamos: Perceba que **Observed**, sendo a média da taxa de cliques diária na nossa amostra, está longe de **Mean**, o ponto central da distribuição gerada pelas permutações (**H0**), rejeitando a hipótese nula. Veja também que **Mean** é um valor bem próximo de zero, e não poderia ser diferente, pois **H0** prevê ausência da correlação entre as taxas de "a" e "b".
 
-Sendo assim, com base nestes valores, com um p-valor menor que 0.005, podemos afirmar, com mais de 95% de certeza, que há uma correlação significativa entre estes valores na população (refletida na amostra).
+Sendo assim, com base nestes valores, com um grau de significância estatística maior que 95% (p-valor menor que 0.005), podemos afirmar que há uma correlação significativa entre estes valores na população (refletida na amostra), rejeitando **H0**.
 
 Relembrando o [relatório](http://rpubs.com/tiago_clementino/390167) anterior, podemos comparar IC(Intervalos de Confiança) e TH (Testes de Hipóteses). Entenda que TH não traz nenhuma informação numérica acerca dos dados da população, apenas responde uma pergunta sobre ela. Já IC, além de cumprir a mesma função de responder à uma pergunta sobre a população, ainda apresenta informação numérica sobre esta, deixando o pesquisador à vontade para decidir se aqueles valores o permitem concluir alguma coisa.
 
@@ -299,10 +298,10 @@ Sob estas circunstâncias, tal como pudemos ver no [relatório anterior](http://
 
 Refazendo o processo realizado em **Q1**, devemos estabelecer nossas hipóteses e o que significam especificamente:
 
- - **H0**: Sendo esta a hipótese nula, significa que não há correlação entre os grupos. Caso esteja aceita, qualquer resultado apresentado será uma consequência da natureza geral dos dados. Sendo assim, a distribuição da diferença entre as médias de cliques deve incluir o zero.
+ - **H0**: Sendo esta a hipótese nula, significa que não há correlação/diferença entre os grupos. Caso esteja aceita, qualquer resultado apresentado será consequência da natureza geral dos dados. Sendo assim, a distribuição da diferença entre as médias de cliques deve incluir o zero.
  - **H1**: Sendo a hipótese alternativa. Caso seja aceita, então há correlação entre os grupos. A verificação desta hipótese é feita através da distância em relação à **H0**.
  
-Novamente, perceba no gráfico abaixo que a distribuição das permutações agora segue o padrão de uma distribuição gaussiana comum. Isto se dá, como foi previsto, em função da homogeneidade entre os grupos, o que não nos permite inferir nada neste momento. Já a linha vermelha marcando o p-valor no centro de nosso gráfico sugere não haver diferença significativa entre a **H1** e **H0**.
+Novamente, perceba no gráfico abaixo que a distribuição das permutações agora segue o padrão de uma distribuição gaussiana comum. Isto se dá, como foi previsto, em função da homogeneidade entre os grupos, o que não nos permite inferir nada neste momento. Já a linha vermelha marcando o p-valor no centro de nosso gráfico sugere não haver diferença aparente entre a **H1** e **H0**.
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -341,11 +340,11 @@ tibble(observed = as.double(populacao_AA$observed), statistic = as.double(popula
 
 ```
 
-Vejamos nos dados abaixo que, como percebemos no gráfico acima, não há uma correlação da taxa de cliques entre os dois grupos. Novamente: Perceba que **Observed**, sendo a média da taxa de cliques diária na nossa amostra, é similar à **Mean** e ambas estão próximas a zero. Aceitando a hipótese nula e sugerindo a ausência da diferença entre as taxas de "A" e "A'".
+Vejamos nos dados abaixo que, como percebemos no gráfico acima, não há uma correlação da taxa de cliques entre os dois grupos. Novamente: Perceba que **Observed**, sendo a média da taxa de cliques diária na nossa amostra, é similar à **Mean** e ambas estão próximas a zero, tendendo à aceitar a hipótese nula e sugerindo a ausência da diferença entre as taxas de "A" e "A'".
 
-Sendo assim, com base nestes valores, tendo o p-valor maior que 0.9, posso considerar a hipótese nula aceita. Não há correlação significativa entre estes valores na população (que esteja refletida na amostra).
+Sendo assim, com base nestes valores, tendo um grau de significância estatística de aproximadamente 85% (p-valor em torno de 0.15), não temos significância estatística suficiente para aceitar a hipótese nula. Isto se dá possivelmente em função do tamanho reduzido da nossa amostra (apenas oito dias), tal característica não interferiu na questão anterior (**Q1**) em função da uma grande diferença entre os grupos "a" e "b". Assim, não é possível saber se há correlação significativa entre estes valores na população (de registro de dias observados) com base na amostra.
 
-Novamente, a partir de teste de hipóteses, não temos dados numéricos que materializem nossos resultados, apenas a resposta a uma pergunta com base em um único valor (o centro da distribuição), ao contrário da inferência estatística por IC.
+Novamente, a partir de teste de hipóteses, não temos dados numéricos que materializem nossos resultados, apenas a resposta a uma pergunta com base em um único valor (o centro da distribuição) e sua significância, ao contrário da inferência estatística por IC que apresenta uma faixa de valores possíveis (intervalo) e a significância.
 
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
 
@@ -450,4 +449,4 @@ populacao_AA %>%
 
 A partir das duas questões propostas analisamos o comportamento da variável `clickthrough rate` diariamente, mas, principalmente, exploramos as possibilidades do método de inferência estatística por teste de hipóteses. Com base em **Q1** e o cálculo das sessões de buscas com acesso a resultados (cliques) pudemos inferir, com base na amostra, uma diferença significativa nas proporções entre os grupos "a" e "b", o que sugere uma diferença funcional entre estas duas categorias.
 
-Por fim, refazendo a **Q1** (alternativa), agora em uma análise não-pareado a partir de uma reamostragem aleatória da amostra original (criando os grupos A e A'), pudemos confirmar a eficácia do método de teste de hipóteses e aceitar a hipótese nula, como esperado (com p-valor de 0.9).
+Por fim, refazendo a **Q1** (alternativa), agora em uma análise não-pareado a partir de uma reamostragem aleatória da amostra original (criando os grupos A e A'), pudemos confirmar a eficácia do método de teste de hipóteses, pois, diferentemente do caso anterior, uma diferença entre os grupos não foi verificada.
